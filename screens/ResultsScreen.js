@@ -14,7 +14,6 @@ import {
   Surface,
   ProgressBar,
   Divider,
-  IconButton,
 } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
@@ -23,11 +22,56 @@ import { logAnalysisResult } from '../services/firebaseService';
 
 const { width } = Dimensions.get('window');
 
-const MODEL_DESCRIPTIONS = {
-  model1: 'Face landmarks and detection quality analysis',
-  model2: 'Deep forensics neural network for manipulation detection',
-  model3: 'Liveness check based on texture and micro-expressions',
-  model4: 'Facial symmetry and structural consistency analysis',
+// Method details for UI display
+const METHOD_INFO = {
+  cnn: {
+    name: 'CNN / Pattern Analysis',
+    icon: 'brain',
+    emoji: '🧠',
+    description: 'Deep learning pattern recognition',
+  },
+  texture: {
+    name: 'Texture Analysis',
+    icon: 'magnify-scan',
+    emoji: '🔍',
+    description: 'Skin smoothness and GAN artifacts',
+  },
+  color: {
+    name: 'Color Analysis',
+    icon: 'palette',
+    emoji: '🎨',
+    description: 'Unnatural color patterns detection',
+  },
+  geometry: {
+    name: 'Geometry Analysis',
+    icon: 'vector-polygon',
+    emoji: '📐',
+    description: 'Face proportions and structure',
+  },
+  frequency: {
+    name: 'Frequency Analysis',
+    icon: 'waveform',
+    emoji: '📊',
+    description: 'FFT compression artifacts',
+  },
+  symmetry: {
+    name: 'Symmetry Analysis',
+    icon: 'scale-balance',
+    emoji: '⚖️',
+    description: 'Left-right face symmetry check',
+  },
+  blink: {
+    name: 'Eye Blink Detection',
+    icon: 'eye',
+    emoji: '👁️',
+    description: 'Natural blink pattern analysis',
+  },
+  pupil: {
+    name: 'Pupil Dynamics',
+    icon: 'eye-circle',
+    emoji: '🔮',
+    description: 'Pupil size variation tracking',
+  },
 };
 
 export default function ResultsScreen({ navigation, route }) {
@@ -38,21 +82,44 @@ export default function ResultsScreen({ navigation, route }) {
 
   const isProbablyDeepfake = result.isProbablyDeepfake;
   const confidence = result.confidence;
+  const isVideo = result.fileType === 'video';
+  
+  // Get scores (support both old and new format)
+  const scores = result.scores || {
+    cnn: result.model1 || 50,
+    texture: result.model2 || 50,
+    color: 50,
+    geometry: 50,
+    frequency: result.model3 || 50,
+    symmetry: result.model4 || 50,
+    blink: 50,
+    pupil: 50,
+  };
 
   // Determine verdict color
   const verdictColor = isProbablyDeepfake ? '#FF6B6B' : '#10B981';
   const verdictBgColor = isProbablyDeepfake ? '#FF6B6B15' : '#10B98115';
 
+  // Get score color
+  const getScoreColor = (score) => {
+    if (score >= 70) return '#FF6B6B';
+    if (score >= 40) return '#F59E0B';
+    return '#10B981';
+  };
+
+  // Generate detailed report
   const generateReport = () => {
     const timestamp = new Date(result.timestamp).toLocaleString();
-    const report = `
+    
+    let report = `
 ═══════════════════════════════════════════════════════
                  DEEPFLY ANALYSIS REPORT
 ═══════════════════════════════════════════════════════
 
 📅 Analysis Date: ${timestamp}
-🔬 Method: Ensemble ML (4 Models)
-⏱️ Processing Time: ${result.processingTime.toFixed(2)} seconds
+🔬 File Type: ${result.fileType || 'Unknown'}
+⏱️ Processing Time: ${result.processingTime?.toFixed(2) || '?'} seconds
+📷 Frames Analyzed: ${result.framesAnalyzed || 1}
 
 ───────────────────────────────────────────────────────
                       VERDICT
@@ -60,51 +127,63 @@ export default function ResultsScreen({ navigation, route }) {
 
 ${isProbablyDeepfake ? '⚠️ LIKELY DEEPFAKE' : '✅ LIKELY AUTHENTIC'}
 
-Confidence Score: ${confidence}%
+🎯 Final Confidence Score: ${confidence}%
 
 ───────────────────────────────────────────────────────
-                   MODEL BREAKDOWN
+                 DETAILED BREAKDOWN
 ───────────────────────────────────────────────────────
 
-📊 Model 1 - Face Detection
-   Score: ${result.model1}%
-   ${MODEL_DESCRIPTIONS.model1}
+🧠 CNN/Pattern Analysis:    ${scores.cnn}%
+🔍 Texture Analysis:        ${scores.texture}%
+🎨 Color Analysis:          ${scores.color}%
+📐 Geometry Analysis:       ${scores.geometry}%
+📊 Frequency Analysis:      ${scores.frequency}%
+⚖️ Symmetry Analysis:       ${scores.symmetry}%`;
 
-📊 Model 2 - Deep Forensics
-   Score: ${result.model2}%
-   ${MODEL_DESCRIPTIONS.model2}
+    if (isVideo) {
+      report += `
+👁️ Eye Blink Detection:     ${scores.blink}%
+🔮 Pupil Dynamics:          ${scores.pupil}%
 
-📊 Model 3 - Liveness Check
-   Score: ${result.model3}%
-   ${MODEL_DESCRIPTIONS.model3}
+📹 Video-Specific Info:
+   • Blink Count: ${result.blinkCount || 0}
+   • Pupil Variance: ${result.pupilVariance?.toFixed(1) || 0}%`;
+    }
 
-📊 Model 4 - Symmetry Analysis
-   Score: ${result.model4}%
-   ${MODEL_DESCRIPTIONS.model4}
+    if (result.indicators && result.indicators.length > 0) {
+      report += `
+
+───────────────────────────────────────────────────────
+                   ⚠️ INDICATORS FOUND
+───────────────────────────────────────────────────────
+
+${result.indicators.map(ind => `• ${ind}`).join('\n')}`;
+    }
+
+    report += `
 
 ───────────────────────────────────────────────────────
                   TECHNICAL DETAILS
 ───────────────────────────────────────────────────────
 
-👤 Faces Detected: ${result.faces}
-🖼️ File Type: ${currentAnalysis?.fileType || 'Unknown'}
-📁 File Name: ${currentAnalysis?.fileInfo?.name || 'Unknown'}
+👤 Faces Detected: ${result.faces || 0}
+🔧 Methods Used: ${result.methodsUsed?.length || 6}
 
 ───────────────────────────────────────────────────────
                      DISCLAIMER
 ───────────────────────────────────────────────────────
 
 This analysis is provided for informational purposes only.
-Results are based on AI/ML models and may not be 100% accurate.
+Results are based on AI/ML algorithms and heuristics.
 False positives and negatives are possible.
 
 Generated by DeepFly - AI-Powered Deepfake Detector
 All processing performed on-device for privacy.
 
 ═══════════════════════════════════════════════════════
-`.trim();
+`;
 
-    return report;
+    return report.trim();
   };
 
   const shareReport = async () => {
@@ -112,35 +191,27 @@ All processing performed on-device for privacy.
       setSharing(true);
       const report = generateReport();
       
-      // Try native share first
-      const result = await Share.share({
+      await Share.share({
         message: report,
         title: 'DeepFly Analysis Report',
       });
-
-      if (result.action === Share.sharedAction) {
-        console.log('Report shared successfully');
-      }
     } catch (error) {
       console.error('Share error:', error);
-      Alert.alert('Error', 'Failed to share report. Please try again.');
+      Alert.alert('Error', 'Failed to share report.');
     } finally {
       setSharing(false);
     }
   };
 
-  const saveReportToFile = async () => {
-    // Use the same share functionality for saving
-    await shareReport();
-  };
-
   const handleGoHome = () => {
-    // Log to Firebase (optional)
     logAnalysisResult(result);
-    
-    // Navigate to home
     navigation.popToTop();
   };
+
+  // Methods to display
+  const methodsToShow = isVideo
+    ? ['cnn', 'texture', 'color', 'geometry', 'frequency', 'symmetry', 'blink', 'pupil']
+    : ['cnn', 'texture', 'color', 'geometry', 'frequency', 'symmetry'];
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -184,48 +255,82 @@ All processing performed on-device for privacy.
         </Text>
       </Surface>
 
-      {/* Model Breakdown */}
-      <Text style={styles.sectionTitle}>Model Breakdown</Text>
-      
-      {[
-        { key: 'model1', name: 'Face Detection', icon: 'face-recognition', score: result.model1 },
-        { key: 'model2', name: 'Deep Forensics', icon: 'magnify', score: result.model2 },
-        { key: 'model3', name: 'Liveness Check', icon: 'eye', score: result.model3 },
-        { key: 'model4', name: 'Symmetry Analysis', icon: 'chart-line', score: result.model4 },
-      ].map((model, index) => (
-        <Surface key={model.key} style={styles.modelCard} elevation={2}>
-          <View style={styles.modelHeader}>
-            <View style={styles.modelIconContainer}>
-              <MaterialCommunityIcons
-                name={model.icon}
-                size={24}
-                color="#FF6B6B"
-              />
+      {/* Indicators (if any) */}
+      {result.indicators && result.indicators.length > 0 && (
+        <Surface style={styles.indicatorsCard} elevation={2}>
+          <Text style={styles.indicatorsTitle}>⚠️ Suspicious Indicators Found</Text>
+          {result.indicators.map((indicator, idx) => (
+            <View key={idx} style={styles.indicatorRow}>
+              <MaterialCommunityIcons name="alert" size={16} color="#FF6B6B" />
+              <Text style={styles.indicatorText}>{indicator}</Text>
             </View>
-            <View style={styles.modelInfo}>
-              <Text style={styles.modelName}>{model.name}</Text>
-              <Text style={styles.modelDescription}>
-                {MODEL_DESCRIPTIONS[model.key]}
-              </Text>
-            </View>
-            <Text style={styles.modelScore}>{model.score}%</Text>
-          </View>
-          <ProgressBar
-            progress={model.score / 100}
-            color={model.score > 70 ? '#FF6B6B' : model.score > 40 ? '#F59E0B' : '#10B981'}
-            style={styles.modelProgressBar}
-          />
+          ))}
         </Surface>
-      ))}
+      )}
+
+      {/* Detection Methods Breakdown */}
+      <Text style={styles.sectionTitle}>🔬 Detection Methods</Text>
+      
+      {methodsToShow.map((key) => {
+        const info = METHOD_INFO[key];
+        const score = scores[key] || 50;
+        const color = getScoreColor(score);
+        
+        return (
+          <Surface key={key} style={styles.methodCard} elevation={2}>
+            <View style={styles.methodHeader}>
+              <View style={[styles.methodIconContainer, { backgroundColor: color + '15' }]}>
+                <Text style={styles.methodEmoji}>{info.emoji}</Text>
+              </View>
+              <View style={styles.methodInfo}>
+                <Text style={styles.methodName}>{info.name}</Text>
+                <Text style={styles.methodDescription}>{info.description}</Text>
+              </View>
+              <View style={styles.scoreContainer}>
+                <Text style={[styles.methodScore, { color }]}>{score}%</Text>
+                <Text style={[styles.scoreLabel, { color }]}>
+                  {score >= 70 ? 'High' : score >= 40 ? 'Medium' : 'Low'}
+                </Text>
+              </View>
+            </View>
+            <ProgressBar
+              progress={score / 100}
+              color={color}
+              style={styles.methodProgressBar}
+            />
+          </Surface>
+        );
+      })}
+
+      {/* Video-specific stats */}
+      {isVideo && (
+        <Surface style={styles.videoStatsCard} elevation={2}>
+          <Text style={styles.videoStatsTitle}>📹 Video Analysis Stats</Text>
+          <View style={styles.videoStatsRow}>
+            <View style={styles.videoStat}>
+              <Text style={styles.videoStatValue}>{result.framesAnalyzed || 1}</Text>
+              <Text style={styles.videoStatLabel}>Frames</Text>
+            </View>
+            <View style={styles.videoStat}>
+              <Text style={styles.videoStatValue}>{result.blinkCount || 0}</Text>
+              <Text style={styles.videoStatLabel}>Blinks</Text>
+            </View>
+            <View style={styles.videoStat}>
+              <Text style={styles.videoStatValue}>{result.pupilVariance?.toFixed(1) || '0'}%</Text>
+              <Text style={styles.videoStatLabel}>Pupil Var</Text>
+            </View>
+          </View>
+        </Surface>
+      )}
 
       {/* Technical Details */}
-      <Text style={styles.sectionTitle}>Technical Details</Text>
+      <Text style={styles.sectionTitle}>📋 Technical Details</Text>
       
       <Surface style={styles.detailsCard} elevation={2}>
         <View style={styles.detailRow}>
           <MaterialCommunityIcons name="account-group" size={20} color="#808080" />
           <Text style={styles.detailLabel}>Faces Detected</Text>
-          <Text style={styles.detailValue}>{result.faces}</Text>
+          <Text style={styles.detailValue}>{result.faces || 0}</Text>
         </View>
         
         <Divider style={styles.detailDivider} />
@@ -233,15 +338,23 @@ All processing performed on-device for privacy.
         <View style={styles.detailRow}>
           <MaterialCommunityIcons name="timer" size={20} color="#808080" />
           <Text style={styles.detailLabel}>Processing Time</Text>
-          <Text style={styles.detailValue}>{result.processingTime.toFixed(2)}s</Text>
+          <Text style={styles.detailValue}>{result.processingTime?.toFixed(2) || '?'}s</Text>
         </View>
         
         <Divider style={styles.detailDivider} />
         
         <View style={styles.detailRow}>
           <MaterialCommunityIcons name="chip" size={20} color="#808080" />
-          <Text style={styles.detailLabel}>Method</Text>
-          <Text style={styles.detailValue}>Ensemble ML (4 models)</Text>
+          <Text style={styles.detailLabel}>Methods Used</Text>
+          <Text style={styles.detailValue}>{methodsToShow.length} methods</Text>
+        </View>
+        
+        <Divider style={styles.detailDivider} />
+        
+        <View style={styles.detailRow}>
+          <MaterialCommunityIcons name="file-document" size={20} color="#808080" />
+          <Text style={styles.detailLabel}>File Type</Text>
+          <Text style={styles.detailValue}>{result.fileType || 'Unknown'}</Text>
         </View>
         
         <Divider style={styles.detailDivider} />
@@ -260,15 +373,15 @@ All processing performed on-device for privacy.
         <Text style={styles.interpretationTitle}>📊 Score Interpretation</Text>
         <View style={styles.interpretationRow}>
           <View style={[styles.interpretationDot, { backgroundColor: '#10B981' }]} />
-          <Text style={styles.interpretationText}>0-40%: Likely authentic</Text>
+          <Text style={styles.interpretationText}>0-40%: Likely authentic (Low risk)</Text>
         </View>
         <View style={styles.interpretationRow}>
           <View style={[styles.interpretationDot, { backgroundColor: '#F59E0B' }]} />
-          <Text style={styles.interpretationText}>40-70%: Inconclusive</Text>
+          <Text style={styles.interpretationText}>40-70%: Inconclusive (Medium risk)</Text>
         </View>
         <View style={styles.interpretationRow}>
           <View style={[styles.interpretationDot, { backgroundColor: '#FF6B6B' }]} />
-          <Text style={styles.interpretationText}>70-100%: Likely deepfake</Text>
+          <Text style={styles.interpretationText}>70-100%: Likely deepfake (High risk)</Text>
         </View>
       </Surface>
 
@@ -283,17 +396,6 @@ All processing performed on-device for privacy.
           loading={sharing}
         >
           Share Report
-        </Button>
-        
-        <Button
-          mode="outlined"
-          onPress={saveReportToFile}
-          style={styles.actionButton}
-          textColor="#FF6B6B"
-          icon="download"
-          loading={sharing}
-        >
-          Save Report
         </Button>
       </View>
 
@@ -331,7 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 20,
     borderWidth: 1,
     borderColor: '#252525',
   },
@@ -339,7 +441,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   verdictText: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 16,
   },
@@ -349,7 +451,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   confidenceValue: {
-    fontSize: 56,
+    fontSize: 52,
     fontWeight: 'bold',
     marginBottom: 12,
   },
@@ -368,6 +470,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 19,
   },
+  indicatorsCard: {
+    backgroundColor: '#2A1515',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#FF6B6B30',
+  },
+  indicatorsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FF6B6B',
+    marginBottom: 12,
+  },
+  indicatorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  indicatorText: {
+    fontSize: 13,
+    color: '#FFB4B4',
+    marginLeft: 8,
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -375,50 +501,91 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     marginTop: 8,
   },
-  modelCard: {
+  methodCard: {
     backgroundColor: '#1A1A1A',
     borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#252525',
   },
-  modelHeader: {
+  methodHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
   },
-  modelIconContainer: {
-    width: 44,
-    height: 44,
+  methodIconContainer: {
+    width: 42,
+    height: 42,
     borderRadius: 12,
-    backgroundColor: '#FF6B6B15',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  modelInfo: {
+  methodEmoji: {
+    fontSize: 20,
+  },
+  methodInfo: {
     flex: 1,
   },
-  modelName: {
-    fontSize: 15,
+  methodName: {
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 2,
   },
-  modelDescription: {
+  methodDescription: {
     fontSize: 11,
-    color: '#808080',
+    color: '#707070',
   },
-  modelScore: {
+  scoreContainer: {
+    alignItems: 'flex-end',
+  },
+  methodScore: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFFFFF',
   },
-  modelProgressBar: {
-    height: 6,
+  scoreLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  methodProgressBar: {
+    height: 5,
     borderRadius: 3,
     backgroundColor: '#252525',
+  },
+  videoStatsCard: {
+    backgroundColor: '#1A1A2E',
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#252545',
+  },
+  videoStatsTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  videoStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  videoStat: {
+    alignItems: 'center',
+  },
+  videoStatValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#A78BFA',
+  },
+  videoStatLabel: {
+    fontSize: 11,
+    color: '#808080',
+    marginTop: 4,
   },
   detailsCard: {
     backgroundColor: '#1A1A1A',
@@ -477,13 +644,9 @@ const styles = StyleSheet.create({
     color: '#808080',
   },
   actionsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     marginBottom: 16,
   },
   actionButton: {
-    flex: 1,
-    marginHorizontal: 4,
     borderColor: '#FF6B6B',
     borderRadius: 12,
   },
@@ -507,4 +670,3 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
 });
-
