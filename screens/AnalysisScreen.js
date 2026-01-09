@@ -37,6 +37,7 @@ export default function AnalysisScreen({ navigation, route }) {
   
   const setAnalysisResult = useAppStore((state) => state.setAnalysisResult);
   const addToHistory = useAppStore((state) => state.addToHistory);
+  const incrementUsage = useAppStore((state) => state.incrementUsage);
 
   // Pulse animation for the icon
   useEffect(() => {
@@ -109,6 +110,9 @@ export default function AnalysisScreen({ navigation, route }) {
             fileInfo,
             fileType,
           });
+          
+          // Increment daily usage counter
+          incrementUsage();
 
           // Complete progress and navigate
           setProgress(1);

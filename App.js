@@ -5,12 +5,20 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Provider as PaperProvider, MD3DarkTheme } from 'react-native-paper';
 import { Platform } from 'react-native';
 
+import { useAppStore } from './store/appStore';
+
+// Auth Screens
+import AuthLandingScreen from './screens/AuthLandingScreen';
+import AuthEmailScreen from './screens/AuthEmailScreen';
+
+// Main App Screens
 import HomeScreen from './screens/HomeScreen';
 import UploadScreen from './screens/UploadScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import ResultsScreen from './screens/ResultsScreen';
 
-const Stack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator();
+const MainStack = createNativeStackNavigator();
 
 // Custom dark theme with red/pink accents
 const paperTheme = {
@@ -86,53 +94,93 @@ const navTheme = {
   }),
 };
 
+// Auth Navigator (shown when user is not logged in)
+function AuthNavigator() {
+  return (
+    <AuthStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: {
+          backgroundColor: '#0D0D0D',
+        },
+      }}
+    >
+      <AuthStack.Screen name="AuthLanding" component={AuthLandingScreen} />
+      <AuthStack.Screen name="AuthEmail" component={AuthEmailScreen} />
+    </AuthStack.Navigator>
+  );
+}
+
+// Main App Navigator (shown when user is logged in or guest)
+function MainNavigator() {
+  return (
+    <MainStack.Navigator
+      initialRouteName="Home"
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#1A1A1A',
+        },
+        headerTintColor: '#FFFFFF',
+        contentStyle: {
+          backgroundColor: '#0D0D0D',
+        },
+      }}
+    >
+      <MainStack.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ headerShown: false }}
+      />
+      <MainStack.Screen
+        name="Upload"
+        component={UploadScreen}
+        options={{
+          title: 'Select Media',
+        }}
+      />
+      <MainStack.Screen
+        name="Analysis"
+        component={AnalysisScreen}
+        options={{
+          headerShown: false,
+          gestureEnabled: false,
+        }}
+      />
+      <MainStack.Screen
+        name="Results"
+        component={ResultsScreen}
+        options={{
+          title: 'Analysis Results',
+          headerBackVisible: false,
+          gestureEnabled: false,
+        }}
+      />
+      {/* AuthEmail accessible from MainStack for guest upgrade */}
+      <MainStack.Screen
+        name="AuthEmail"
+        component={AuthEmailScreen}
+        options={{
+          title: 'Create Account',
+          presentation: 'modal',
+        }}
+      />
+    </MainStack.Navigator>
+  );
+}
+
+// Root App Component
+function RootNavigator() {
+  const user = useAppStore((state) => state.user);
+  
+  return user ? <MainNavigator /> : <AuthNavigator />;
+}
+
 export default function App() {
   return (
     <PaperProvider theme={paperTheme}>
       <NavigationContainer theme={navTheme}>
         <StatusBar style="light" />
-        <Stack.Navigator
-          initialRouteName="Home"
-          screenOptions={{
-            headerStyle: {
-              backgroundColor: '#1A1A1A',
-            },
-            headerTintColor: '#FFFFFF',
-            contentStyle: {
-              backgroundColor: '#0D0D0D',
-            },
-          }}
-        >
-          <Stack.Screen
-            name="Home"
-            component={HomeScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="Upload"
-            component={UploadScreen}
-            options={{
-              title: 'Select Media',
-            }}
-          />
-          <Stack.Screen
-            name="Analysis"
-            component={AnalysisScreen}
-            options={{
-              headerShown: false,
-              gestureEnabled: false,
-            }}
-          />
-          <Stack.Screen
-            name="Results"
-            component={ResultsScreen}
-            options={{
-              title: 'Analysis Results',
-              headerBackVisible: false,
-              gestureEnabled: false,
-            }}
-          />
-        </Stack.Navigator>
+        <RootNavigator />
       </NavigationContainer>
     </PaperProvider>
   );

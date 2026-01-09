@@ -1,20 +1,62 @@
 import { create } from 'zustand';
 
 export const useAppStore = create((set, get) => ({
-  // Current analysis state
+  // ============ USER & AUTH ============
+  user: null, // { id, name, email, isPro, isGuest }
+  
+  // ============ USAGE LIMITS ============
+  usageToday: 0,
+  dailyLimit: 5, // Default for guest
+  
+  // ============ CURRENT ANALYSIS STATE ============
   currentAnalysis: null,
   analysisResult: null,
   
-  // Analysis history
+  // ============ ANALYSIS HISTORY ============
   history: [],
   
-  // App settings
+  // ============ APP SETTINGS ============
   settings: {
     saveToHistory: true,
     enableFirebaseLogging: false,
   },
 
-  // Actions
+  // ============ AUTH ACTIONS ============
+  setUser: (user) => {
+    let limit = 5; // Guest default
+    if (user && !user.isGuest) {
+      limit = user.isPro ? 100 : 20;
+    }
+    set({ 
+      user, 
+      dailyLimit: limit,
+      // Reset usage when switching accounts
+      usageToday: 0,
+    });
+  },
+  
+  clearUser: () => set({ 
+    user: null, 
+    usageToday: 0, 
+    dailyLimit: 5,
+  }),
+  
+  // ============ USAGE ACTIONS ============
+  incrementUsage: () => set((state) => ({
+    usageToday: state.usageToday + 1,
+  })),
+  
+  resetDailyUsage: () => set({ usageToday: 0 }),
+  // TODO: Implement automatic daily reset with AsyncStorage timestamp check
+  
+  setDailyLimit: (limit) => set({ dailyLimit: limit }),
+  
+  canAnalyze: () => {
+    const state = get();
+    return state.usageToday < state.dailyLimit;
+  },
+
+  // ============ ANALYSIS ACTIONS ============
   setCurrentAnalysis: (analysis) => set({ currentAnalysis: analysis }),
   
   setAnalysisResult: (result) => set({ analysisResult: result }),
@@ -49,7 +91,7 @@ export const useAppStore = create((set, get) => ({
     settings: { ...state.settings, ...newSettings },
   })),
 
-  // Computed getters
+  // ============ COMPUTED GETTERS ============
   getHistoryStats: () => {
     const history = get().history;
     if (history.length === 0) return null;
@@ -65,5 +107,8 @@ export const useAppStore = create((set, get) => ({
       averageConfidence: Math.round(avgConfidence),
     };
   },
+  
+  getRecentHistory: (count = 5) => {
+    return get().history.slice(0, count);
+  },
 }));
-
