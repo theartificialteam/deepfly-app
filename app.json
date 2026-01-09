@@ -1,29 +1,81 @@
 {
   "expo": {
-    "name": "deepfly-app",
+    "name": "DeepFly",
     "slug": "deepfly-app",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#0D0D0D"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.theartificialteam.deepfly",
+      "buildNumber": "1",
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "DeepFly needs access to your photo library to analyze images and videos for potential deepfake manipulation.",
+        "NSCameraUsageDescription": "DeepFly needs camera access to capture photos for deepfake analysis.",
+        "NSMicrophoneUsageDescription": "DeepFly needs microphone access when recording videos for analysis.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0D0D0D"
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.theartificialteam.deepfly",
+      "versionCode": 1,
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "DeepFly needs access to your photos for deepfake analysis.",
+          "cameraPermission": "DeepFly needs camera access to capture photos for analysis."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "DeepFly needs camera access to capture photos for deepfake analysis."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "DeepFly needs access to your media library.",
+          "savePhotosPermission": "DeepFly needs permission to save reports."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-project-id"
+      }
+    },
+    "owner": "theartificialteam",
+    "description": "AI-powered deepfake detector. Analyze photos and videos for manipulation with on-device AI. 100% private - your media never leaves your phone.",
+    "githubUrl": "https://github.com/theartificialteam/deepfly-app",
+    "primaryColor": "#FF6B6B"
   }
 }

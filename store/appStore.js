@@ -1,12 +1,32 @@
+/**
+ * App Store - Global State Management
+ * 
+ * Manages all application state using Zustand.
+ * Syncs with persistent storage for data persistence.
+ */
+
 import { create } from 'zustand';
+import {
+  saveUser,
+  deleteUser,
+  saveHistoryItem,
+  saveUsageToday,
+  saveLastResetDate,
+  getTodayDateString,
+} from '../services/storage';
 
 export const useAppStore = create((set, get) => ({
+  // ============ APP STATE ============
+  isInitialized: false,
+  hasAgreedToLegal: false,
+  
   // ============ USER & AUTH ============
   user: null, // { id, name, email, isPro, isGuest }
   
   // ============ USAGE LIMITS ============
   usageToday: 0,
   dailyLimit: 5, // Default for guest
+  lastResetDate: null,
   
   // ============ CURRENT ANALYSIS STATE ============
   currentAnalysis: null,
@@ -21,39 +41,97 @@ export const useAppStore = create((set, get) => ({
     enableFirebaseLogging: false,
   },
 
+  // ============ INITIALIZATION ============
+  setInitialized: (value) => set({ isInitialized: value }),
+  
+  setHasAgreedToLegal: (value) => set({ hasAgreedToLegal: value }),
+
   // ============ AUTH ACTIONS ============
-  setUser: (user) => {
+  setUser: async (user) => {
     let limit = 5; // Guest default
     if (user && !user.isGuest) {
       limit = user.isPro ? 100 : 20;
     }
+    
     set({ 
       user, 
       dailyLimit: limit,
-      // Reset usage when switching accounts
-      usageToday: 0,
     });
+    
+    // Persist to storage
+    if (user) {
+      await saveUser(user);
+    }
   },
   
-  clearUser: () => set({ 
-    user: null, 
-    usageToday: 0, 
-    dailyLimit: 5,
-  }),
+  clearUser: async () => {
+    set({ 
+      user: null, 
+      usageToday: 0, 
+      dailyLimit: 5,
+    });
+    
+    // Clear from storage
+    await deleteUser();
+  },
+  
+  updateUserPro: async (isPro) => {
+    const { user } = get();
+    if (user) {
+      const updatedUser = { ...user, isPro };
+      const newLimit = isPro ? 100 : (user.isGuest ? 5 : 20);
+      
+      set({ 
+        user: updatedUser,
+        dailyLimit: newLimit,
+      });
+      
+      await saveUser(updatedUser);
+    }
+  },
   
   // ============ USAGE ACTIONS ============
-  incrementUsage: () => set((state) => ({
-    usageToday: state.usageToday + 1,
-  })),
+  incrementUsage: async () => {
+    const newUsage = get().usageToday + 1;
+    set({ usageToday: newUsage });
+    
+    // Persist to storage
+    await saveUsageToday(newUsage);
+  },
   
-  resetDailyUsage: () => set({ usageToday: 0 }),
-  // TODO: Implement automatic daily reset with AsyncStorage timestamp check
+  resetDailyUsage: async () => {
+    const today = getTodayDateString();
+    set({ 
+      usageToday: 0,
+      lastResetDate: today,
+    });
+    
+    // Persist to storage
+    await saveUsageToday(0);
+    await saveLastResetDate(today);
+  },
   
   setDailyLimit: (limit) => set({ dailyLimit: limit }),
   
+  setUsageToday: (usage) => set({ usageToday: usage }),
+  
+  setLastResetDate: (date) => set({ lastResetDate: date }),
+  
+  checkAndResetDaily: async () => {
+    const { lastResetDate } = get();
+    const today = getTodayDateString();
+    
+    if (lastResetDate !== today) {
+      console.log('[Store] New day detected, resetting usage');
+      await get().resetDailyUsage();
+      return true;
+    }
+    return false;
+  },
+  
   canAnalyze: () => {
-    const state = get();
-    return state.usageToday < state.dailyLimit;
+    const { usageToday, dailyLimit } = get();
+    return usageToday < dailyLimit;
   },
 
   // ============ ANALYSIS ACTIONS ============
@@ -66,20 +144,24 @@ export const useAppStore = create((set, get) => ({
     analysisResult: null 
   }),
   
-  addToHistory: (result) => set((state) => {
-    if (!state.settings.saveToHistory) return state;
+  addToHistory: async (result) => {
+    const { settings, history } = get();
+    if (!settings.saveToHistory) return;
     
-    const newHistory = [
-      {
-        id: Date.now().toString(),
-        ...result,
-        savedAt: Date.now(),
-      },
-      ...state.history,
-    ].slice(0, 50); // Keep only last 50 analyses
+    const historyItem = {
+      id: Date.now().toString(),
+      ...result,
+      savedAt: Date.now(),
+    };
     
-    return { history: newHistory };
-  }),
+    const newHistory = [historyItem, ...history].slice(0, 50);
+    set({ history: newHistory });
+    
+    // Persist to storage
+    await saveHistoryItem(historyItem);
+  },
+  
+  setHistory: (history) => set({ history }),
   
   clearHistory: () => set({ history: [] }),
   
@@ -110,5 +192,10 @@ export const useAppStore = create((set, get) => ({
   
   getRecentHistory: (count = 5) => {
     return get().history.slice(0, count);
+  },
+  
+  getRemainingAnalyses: () => {
+    const { usageToday, dailyLimit } = get();
+    return Math.max(0, dailyLimit - usageToday);
   },
 }));
