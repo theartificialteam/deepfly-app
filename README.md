@@ -53,6 +53,10 @@ The power of DeepFly lies not just in the individual methods, but in how their r
 2.  **Consensus Boost:** If a strong majority of methods (e.g., 3 or more) agree on a verdict (either "AI-Generated" or "Authentic"), the final confidence score is significantly boosted in that direction. This prevents a single outlier method from skewing the result.
 3.  **Pattern Recognition:** The engine identifies specific cross-method patterns. For example, a high score in `Edge Coherence` combined with a high score in `Noise Analysis` is a strong indicator of a face-swap, triggering a score adjustment.
 
+### 📝 Note on Deep Learning Model Integration (Future Enhancement)
+
+While DeepFly currently relies on its highly effective 5-method algorithmic ensemble for robust deepfake detection, the integration of a dedicated deep learning model (e.g., MesoNet) is planned for future enhancements. An initial attempt to integrate MesoNet was made, but was temporarily blocked due to Python environment compatibility issues during model conversion to TensorFlow.js format. This feature will be revisited and fully integrated once these technical dependencies are resolved, further boosting the detection capabilities.
+
 ### 📈 Expected Accuracy
 
 | Media Type | Expected Score |
