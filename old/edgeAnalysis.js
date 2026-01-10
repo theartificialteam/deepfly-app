@@ -302,64 +302,51 @@ export async function analyzeEdgeCoherence(imageData, width, height) {
   console.log(`[Edge]    Circular spike ratio: ${circularResult.spikeRatio.toFixed(3)}`);
   
   // =========================================================================
-  // SCORING LOGIC (v2 - Proportional & More Robust)
+  // SCORING LOGIC (v3 - Re-tuned & Additive Only)
   // =========================================================================
   
   let score = 0;
   const indicators = [];
-  const partScores = {};
-
-  const centerOuterRatio = regionResult.center.meanGradient / Math.max(1, regionResult.outer.meanGradient);
-  const ringAnomaly = regionResult.ring.stdGradient / Math.max(1, regionResult.center.stdGradient);
+  
   const discontinuityRate = discontinuityResult.numDiscontinuities / Math.max(1, width * height / 1000);
 
-  // --- 1. Center-Outer Mismatch Score ---
-  // Deepfakes often have a smoother center (ratio < 0.7) than the real background.
-  partScores.mismatch = clamp(100 * (1.0 - centerOuterRatio) / (1.0 - 0.5), 0, 100);
-  if (partScores.mismatch > 80) {
-    indicators.push('Suspicious center-outer edge mismatch');
+  // --- Deepfake Detection: Circular edge pattern ---
+  // A high spike ratio is a strong indicator of a circular face swap seam.
+  if (circularResult.spikeRatio > 1.8) {
+    score += 40;
+    indicators.push('Circular edge pattern detected (face swap)');
+  } else if (circularResult.spikeRatio > 1.4) {
+    score += 25;
+    indicators.push('Potential circular edge anomaly');
   }
-
-  // --- 2. Ring Anomaly Score ---
-  // The blending zone in face swaps shows high variation (anomaly > 1.5).
-  partScores.ring = clamp(100 * (ringAnomaly - 1.2) / (2.0 - 1.2), 0, 100);
-  if (partScores.ring > 75) {
-    indicators.push('Abnormal edge variation in face boundary zone');
-  }
-
-  // --- 3. Edge Discontinuity Score ---
-  // High rate of discontinuities (> 0.08) suggests seams.
-  partScores.discontinuity = clamp(100 * (discontinuityRate - 0.05) / (0.15 - 0.05), 0, 100);
-  if (partScores.discontinuity > 75) {
+  
+  // --- Deepfake Detection: Edge discontinuities ---
+  // A high rate of discontinuities can indicate blended seams.
+  // The log showed a very high number (29142), so we tune the rate.
+  if (discontinuityRate > 100) { // Rate is num/pixels*1000. 29142 / (256*256) * 1000 = ~444
+      score += 30;
+      indicators.push('Very high edge discontinuity rate (seams)');
+  } else if (discontinuityRate > 50) {
+    score += 15;
     indicators.push('High edge discontinuity rate');
   }
 
-  // --- 4. Circular Pattern Score ---
-  // A spike in edge magnitude at a certain radius (ratio > 1.4) is a strong face swap indicator.
-  partScores.circular = clamp(100 * (circularResult.spikeRatio - 1.2) / (1.8 - 1.2), 0, 100);
-  if (partScores.circular > 75) {
-    indicators.push('Circular edge pattern detected (face swap seam)');
+  // --- Deepfake Detection: Ring anomaly (blending zone) ---
+  const ringAnomaly = regionResult.ring.stdGradient / Math.max(1, regionResult.center.stdGradient);
+  if (ringAnomaly > 1.5) {
+    score += 20;
+    indicators.push('Abnormal edge variation in face boundary zone');
   }
 
-  // --- 5. Uniform Edge Distribution Score ---
-  // AI images have uniform edge distributions (uniformity < 0.4).
-  partScores.uniformity = clamp(100 * (1.0 - discontinuityResult.localVarianceUniformity) / (1.0 - 0.4), 0, 100);
-  if (partScores.uniformity > 80) {
-    indicators.push('Abnormally uniform edge distribution');
-  }
-
-  // --- 6. Overall Smoothness Score ---
-  // AI images have very smooth overall edges (gradient < 15).
-  partScores.smoothness = clamp(100 * (30 - regionResult.overall.meanGradient) / (30 - 8), 0, 100);
-  if (partScores.smoothness > 80) {
+  // --- AI Detection: Overall edge smoothness ---
+  // Very low overall gradient suggests a synthetic image.
+  if (regionResult.overall.meanGradient < 15) {
+    score += 25;
     indicators.push('Very smooth edges (AI-generated)');
   }
-
-  // Combine scores by taking the average
-  const finalScore = mean(Object.values(partScores));
-
+  
   // Clamp final score
-  score = clamp(Math.round(finalScore), 0, 100);
+  score = clamp(Math.round(score), 0, 100);
   
   const processingTime = Date.now() - startTime;
   console.log(`[Edge] ✅ Score: ${score}%, Time: ${processingTime}ms`);
@@ -368,7 +355,7 @@ export async function analyzeEdgeCoherence(imageData, width, height) {
     score,
     indicators,
     metrics: {
-      centerOuterRatio,
+      centerOuterRatio: regionResult.center.meanGradient / Math.max(1, regionResult.outer.meanGradient),
       ringAnomaly,
       discontinuityRate,
       circularSpikeRatio: circularResult.spikeRatio,

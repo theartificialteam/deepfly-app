@@ -31,6 +31,7 @@ import HomeScreen from './screens/HomeScreen';
 import UploadScreen from './screens/UploadScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import ResultsScreen from './screens/ResultsScreen';
+import UserProfileScreen from './screens/UserProfileScreen';
 
 const AuthStack = createNativeStackNavigator();
 const MainStack = createNativeStackNavigator();
@@ -139,12 +140,17 @@ function MainNavigator() {
       <MainStack.Screen
         name="Results"
         component={ResultsScreen}
-        options={{ title: 'Analysis Results', headerBackVisible: false, gestureEnabled: false }}
+        options={{ title: 'Analysis Results', headerShown: false }}
       />
       <MainStack.Screen
         name="AuthEmail"
         component={AuthEmailScreen}
         options={{ title: 'Create Account', presentation: 'modal' }}
+      />
+      <MainStack.Screen
+        name="UserProfile"
+        component={UserProfileScreen}
+        options={{ title: 'User Profile' }}
       />
     </MainStack.Navigator>
   );

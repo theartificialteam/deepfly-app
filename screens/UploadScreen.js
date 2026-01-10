@@ -118,12 +118,14 @@ export default function UploadScreen({ navigation }) {
     <View style={styles.previewContainer}>
       <Text style={styles.title}>Confirm Selection</Text>
       <Surface style={styles.previewCard} elevation={4}>
-        <Image source={{ uri: selectedFile.thumbnail }} style={styles.thumbnail} />
-        {selectedFile.type === 'video' && (
-          <View style={styles.videoOverlay}>
-            <MaterialCommunityIcons name="play-circle-outline" size={60} color="rgba(255,255,255,0.8)" />
-          </View>
-        )}
+        <View style={styles.thumbnailContainer}>
+          <Image source={{ uri: selectedFile.thumbnail }} style={styles.thumbnail} />
+          {selectedFile.type === 'video' && (
+            <View style={styles.videoOverlay}>
+              <MaterialCommunityIcons name="play-circle-outline" size={60} color="rgba(255,255,255,0.8)" />
+            </View>
+          )}
+        </View>
         <IconButton icon="close-circle" style={styles.clearButton} iconColor="rgba(0,0,0,0.6)" size={30} onPress={() => setSelectedFile(null)} />
         <View style={styles.fileInfo}>
           <Text style={styles.fileName} numberOfLines={1}>{selectedFile.name}</Text>
@@ -219,11 +221,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#252525',
   },
+  thumbnailContainer: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    overflow: 'hidden',
+  },
   thumbnail: {
     width: '100%',
     height: 250,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
     backgroundColor: '#000',
   },
   videoOverlay: {

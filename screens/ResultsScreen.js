@@ -1,185 +1,155 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { View, StyleSheet, ScrollView, Share, Alert, StatusBar, SafeAreaView, Animated } from 'react-native';
+/**
+ * 📊 RESULTS SCREEN - Cockpit UI
+ * =================================
+ * A data-rich, minimalist, "cockpit" style report screen.
+ * Displays a main verdict and simulated sub-system metrics from the server.
+ */
+
+import React from 'react';
+import { View, StyleSheet, ScrollView, SafeAreaView, Image, ActivityIndicator, StatusBar } from 'react-native';
 import { Text, Button, Surface, ProgressBar } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 
-// ACCURATE and NEW method info
-const METHOD_INFO = {
-  frequency: { name: 'Frequency', icon: 'chart-bell-curve', description: 'Analyzes frequency domain for AI patterns.' },
-  noise: { name: 'Noise', icon: 'grain', description: 'Checks for unnatural noise patterns.' },
-  compression: { name: 'Compression', icon: 'zip-box-outline', description: 'Detects non-standard compression artifacts.' },
-  edge: { name: 'Edge Coherence', icon: 'vector-square', description: 'Looks for inconsistent edges, a sign of manipulation.' },
-  texture: { name: 'Texture', icon: 'texture-box', description: 'Analyzes micro-textures for synthetic patterns.' },
+// Maps metric keys from server to display names and icons
+const METRIC_INFO = {
+  texture_consistency: { name: 'Texture', icon: 'texture-box' },
+  edge_artifacts: { name: 'Edges', icon: 'vector-square' },
+  lighting_inconsistencies: { name: 'Lighting', icon: 'lightbulb-on-outline' },
+  facial_structure: { name: 'Structure', icon: 'face-recognition' },
 };
 
-const ScoreCircle = ({ progress, size, strokeWidth, verdictColor }) => {
-    // Component for the main verdict score visualization
-    const AnimatedProgress = Animated.createAnimatedComponent(ProgressBar);
-    const anim = useRef(new Animated.Value(0)).current;
-
-    useEffect(() => {
-        Animated.timing(anim, {
-            toValue: progress,
-            duration: 800,
-            delay: 200,
-            useNativeDriver: false, // ProgressBar progress is not a native prop
-        }).start();
-    }, [progress]);
-
+// A single gauge for a sub-system metric
+const MetricGauge = ({ metric, score }) => {
+    const scoreColor = score >= 65 ? '#E53935' : score >= 35 ? '#FDD835' : '#43A047';
     return (
-        <View style={[styles.scoreContainer, { width: size, height: size }]}>
-            <AnimatedProgress progress={anim} color={verdictColor} style={[styles.scoreProgressBar, { width: size, height: size }]} />
-            <View style={[styles.scoreInnerCircle, { width: size - strokeWidth * 2, height: size - strokeWidth * 2, borderRadius: (size - strokeWidth * 2) / 2 }]}>
-                 <Text style={[styles.scoreValue, { color: verdictColor }]}>{Math.round(progress * 100)}<Text style={styles.scorePercent}>%</Text></Text>
+        <View style={styles.metricRow}>
+            <MaterialCommunityIcons name={METRIC_INFO[metric]?.icon || 'help-circle'} size={20} color="#8899A6" style={styles.metricIcon} />
+            <Text style={styles.metricName}>{METRIC_INFO[metric]?.name || 'Unknown'}</Text>
+            <View style={styles.metricBarContainer}>
+                <View style={[styles.metricBar, { width: `${score}%`, backgroundColor: scoreColor }]} />
             </View>
+            <Text style={styles.metricScore}>{score}%</Text>
         </View>
     );
 };
 
 export default function ResultsScreen({ navigation, route }) {
-  const { result } = route.params;
-  const [sharing, setSharing] = useState(false);
-  const scrollY = useRef(new Animated.Value(0)).current;
-
-  // Animate list items
-  const itemAnims = useRef(Object.keys(result.scores).map(() => new Animated.Value(0))).current;
-  useEffect(() => {
-    const staggers = Object.keys(result.scores).map((_, i) =>
-      Animated.timing(itemAnims[i], {
-        toValue: 1,
-        duration: 400,
-        delay: 400 + i * 100,
-        useNativeDriver: true,
-      })
-    );
-    Animated.stagger(100, staggers).start();
-  }, []);
-
-
-  const { confidence = 50, isProbablyDeepfake, isAuthentic, fileType = 'image', scores = {} } = result;
+  const { result } = route.params || {};
   
-  let verdictColor, verdictText, verdictIcon;
-  if (isProbablyDeepfake) {
-    verdictColor = '#FF6B6B';
-    verdictText = 'AI-GENERATED';
-    verdictIcon = 'robot';
-  } else if (isAuthentic) {
-    verdictColor = '#10B981';
-    verdictText = 'AUTHENTIC';
-    verdictIcon = 'check-decagram';
-  } else {
-    verdictColor = '#FFA502';
-    verdictText = 'INCONCLUSIVE';
-    verdictIcon = 'help-rhombus';
+  // Guard clause for missing or invalid result object
+  if (!result || typeof result.confidence === 'undefined') {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" />
+            <Text style={styles.errorText}>Error loading results...</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
-  const generateReport = () => {
-    // ... (report generation logic can remain similar)
-    return `DeepFly Analysis Report: ${verdictText} with ${confidence}% confidence.`;
-  };
-
-  const shareReport = async () => {
-    setSharing(true);
-    try {
-      await Share.share({ message: generateReport(), title: 'DeepFly Analysis Report' });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to share report.');
-    } finally {
-      setSharing(false);
-    }
-  };
+  const { 
+    confidence, 
+    isProbablyDeepfake, 
+    isAuthentic, 
+    thumbnailUri,
+    metrics = {},
+  } = result;
   
-  const headerOpacity = scrollY.interpolate({ inputRange: [0, 50], outputRange: [1, 0], extrapolate: 'clamp'});
-  const headerTranslateY = scrollY.interpolate({ inputRange: [0, 50], outputRange: [0, -20], extrapolate: 'clamp'});
+  const verdictColor = isProbablyDeepfake ? '#E53935' : (isAuthentic ? '#43A047' : '#FDD835');
+  const verdictText = isProbablyDeepfake ? 'AI / MANIPULATED' : (isAuthentic ? 'AUTHENTIC' : 'INCONCLUSIVE');
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <Animated.ScrollView
-        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-      >
-        <Animated.View style={[styles.header, { opacity: headerOpacity, transform: [{ translateY: headerTranslateY }] }]}>
-            <ScoreCircle progress={confidence / 100} size={220} strokeWidth={16} verdictColor={verdictColor} />
-            <Text style={[styles.verdictLabel, { color: verdictColor }]}>{verdictText}</Text>
-            <Text style={styles.verdictDescription}>
-                {isProbablyDeepfake ? 'Strong indicators of AI manipulation found.' : isAuthentic ? 'Media appears to be authentic.' : 'Could not determine with high confidence.'}
-            </Text>
-        </Animated.View>
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.headerTitle}>Analysis Cockpit</Text>
 
-        {result.indicators && result.indicators.length > 0 && (
-            <Surface style={styles.indicatorsCard} elevation={2}>
-                <View style={styles.indicatorsHeader}>
-                    <MaterialCommunityIcons name="alert-outline" size={20} color="#FFA502" />
-                    <Text style={styles.indicatorsTitle}>Suspicious Indicators</Text>
-                </View>
-                {result.indicators.slice(0, 4).map((indicator, idx) => (
-                    <Text key={idx} style={styles.indicatorText}>• {indicator}</Text>
-                ))}
-            </Surface>
+        {thumbnailUri && (
+          <Surface style={styles.thumbnailCard} elevation={4}>
+            <Image source={{ uri: thumbnailUri }} style={styles.thumbnail} resizeMode="cover" />
+          </Surface>
         )}
 
-        <Text style={styles.sectionTitle}>Analysis Breakdown</Text>
-        {Object.entries(scores).filter(([key]) => METHOD_INFO[key]).map(([key, score], index) => {
-            const info = METHOD_INFO[key];
-            const scoreColor = score >= 65 ? '#FF6B6B' : score >= 35 ? '#FFA502' : '#10B981';
-            const animStyle = {
-                opacity: itemAnims[index],
-                transform: [{
-                    translateX: itemAnims[index].interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-50, 0],
-                    }),
-                }],
-            };
+        <Surface style={styles.mainCard} elevation={4}>
+          <View style={styles.mainScoreHeader}>
+            <Text style={styles.mainScoreTitle}>AI Confidence Score</Text>
+            <Text style={[styles.mainVerdict, { color: verdictColor }]}>{verdictText}</Text>
+          </View>
+          <Text style={[styles.mainScore, { color: verdictColor }]}>{confidence}<Text style={styles.percentSign}>%</Text></Text>
+          <Text style={styles.mainDescription}>This score represents the model's confidence that the media is AI-generated.</Text>
+        </Surface>
 
-            return (
-            <Animated.View key={key} style={animStyle}>
-                <Surface style={styles.methodCard} elevation={2}>
-                    <MaterialCommunityIcons name={info.icon} size={28} color="#A0A0A0" style={styles.methodIcon} />
-                    <View style={styles.methodContent}>
-                        <Text style={styles.methodName}>{info.name}</Text>
-                        <ProgressBar progress={score / 100} color={scoreColor} style={styles.methodProgress} />
-                    </View>
-                    <Text style={[styles.methodScore, { color: scoreColor }]}>{score}%</Text>
-                </Surface>
-            </Animated.View>
-            );
-        })}
-      </Animated.ScrollView>
+        {metrics && Object.keys(metrics).length > 0 && (
+          <Surface style={styles.metricsCard} elevation={2}>
+              <Text style={styles.metricsTitle}>Sub-System Analysis</Text>
+              {Object.entries(metrics).map(([key, score]) => (
+                  <MetricGauge key={key} metric={key} score={score || 0} />
+              ))}
+          </Surface>
+        )}
+
+        {isProbablyDeepfake && (
+            <Surface style={styles.explanationCard} elevation={2}>
+                <Text style={styles.explanationTitle}>Verdict Explanation</Text>
+                <Text style={styles.explanationBody}>
+                    High scores in sub-systems like <Text style={styles.boldText}>Texture</Text> and <Text style={styles.boldText}>Edges</Text> suggest the presence of digital patterns inconsistent with real-world cameras, contributing to the AI-generated verdict.
+                </Text>
+            </Surface>
+        )}
+      </ScrollView>
 
       <View style={styles.footer}>
-        <Button mode="text" onPress={() => navigation.navigate('Upload')} textColor="#A0A0A0">New Analysis</Button>
-        <Button mode="contained" onPress={() => navigation.popToTop()} style={styles.homeButton} labelStyle={{fontWeight: 'bold'}}>Done</Button>
-        <Button mode="text" onPress={shareReport} loading={sharing} textColor="#A0A0A0">Share</Button>
+        <Button mode="outlined" onPress={() => navigation.popToTop()} style={styles.footerButton} textColor="#8899A6">Done</Button>
+        <Button mode="contained" onPress={() => navigation.navigate('Upload')} style={styles.footerButtonPrimary}>New Analysis</Button>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0D0D0D' },
-  content: { padding: 20, paddingBottom: 100 },
-  header: { alignItems: 'center', marginBottom: 24 },
-  verdictLabel: { fontSize: 24, fontWeight: 'bold', letterSpacing: 2, marginTop: 20 },
-  verdictDescription: { fontSize: 16, color: '#A0A0A0', textAlign: 'center', marginTop: 8 },
-  scoreContainer: { justifyContent: 'center', alignItems: 'center' },
-  scoreProgressBar: { position: 'absolute', borderRadius: 1000, backgroundColor: '#1A1A1A' },
-  scoreInnerCircle: { backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#252525'},
-  scoreValue: { fontSize: 56, fontWeight: 'bold' },
-  scorePercent: { fontSize: 24, fontWeight: 'bold', color: '#606060' },
-  indicatorsCard: { backgroundColor: '#332E00', borderRadius: 16, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: '#FFA50240' },
-  indicatorsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-  indicatorsTitle: { fontSize: 16, fontWeight: 'bold', color: '#FFA502', marginLeft: 8 },
-  indicatorText: { fontSize: 14, color: '#D0D0D0', marginBottom: 5, lineHeight: 20 },
-  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 12 },
-  methodCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 12, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: '#252525' },
-  methodIcon: { marginRight: 16 },
-  methodContent: { flex: 1 },
-  methodName: { fontSize: 16, fontWeight: '600', color: '#FFFFFF' },
-  methodProgress: { height: 6, borderRadius: 3, marginTop: 8, backgroundColor: '#303030' },
-  methodScore: { fontSize: 22, fontWeight: 'bold', marginLeft: 16 },
-  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 10, paddingBottom: 25, backgroundColor: '#151515E0', borderTopWidth: 1, borderColor: '#252525'},
-  homeButton: { borderRadius: 16, backgroundColor: '#A78BFA', paddingHorizontal: 20 },
+  container: { flex: 1, backgroundColor: '#000000' },
+  loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { color: '#808080', marginTop: 10 },
+  content: { padding: 16, paddingBottom: 100 },
+  headerTitle: { fontSize: 28, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 16, paddingLeft: 8 },
+  
+  thumbnailCard: {
+    marginBottom: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#2F3336',
+    height: 200,
+    backgroundColor: '#151718',
+  },
+  thumbnail: {
+    flex: 1,
+    borderRadius: 16,
+  },
+
+  mainCard: { backgroundColor: '#151718', borderRadius: 16, padding: 20, marginBottom: 16, borderWidth: 1, borderColor: '#2F3336' },
+  mainScoreHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  mainScoreTitle: { fontSize: 16, color: '#8899A6' },
+  mainVerdict: { fontSize: 16, fontWeight: 'bold' },
+  mainScore: { fontSize: 72, fontWeight: 'bold', marginVertical: 8, letterSpacing: -2 },
+  percentSign: { fontSize: 36, color: '#45484A' },
+  mainDescription: { fontSize: 14, color: '#8899A6', lineHeight: 20 },
+
+  metricsCard: { backgroundColor: '#151718', borderRadius: 16, padding: 20, marginTop: 8, borderWidth: 1, borderColor: '#2F3336' },
+  metricsTitle: { fontSize: 18, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 20 },
+  metricRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  metricIcon: { width: 24 },
+  metricName: { fontSize: 15, color: '#E1E8ED', width: 110, marginLeft: 8 },
+  metricBarContainer: { flex: 1, height: 10, backgroundColor: '#2F3336', borderRadius: 5, marginHorizontal: 12 },
+  metricBar: { height: '100%', borderRadius: 5 },
+  metricScore: { fontSize: 15, color: '#FFFFFF', fontWeight: '600', width: 40, textAlign: 'right' },
+  
+  explanationCard: { backgroundColor: 'rgba(229, 57, 53, 0.05)', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: 'rgba(229, 57, 53, 0.2)', marginTop: 16},
+  explanationTitle: { fontSize: 16, fontWeight: 'bold', color: '#FFFFFF', marginBottom: 8 },
+  explanationBody: { fontSize: 14, color: '#B0B8C0', lineHeight: 20 },
+  boldText: { fontWeight: 'bold', color: '#E1E8ED' },
+
+  footer: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingVertical: 12, paddingBottom: 30, backgroundColor: 'rgba(0,0,0,0.8)', borderTopWidth: 1, borderColor: '#2F3336'},
+  footerButton: { borderColor: '#2F3336', borderRadius: 12, flex: 1, marginHorizontal: 8 },
+  footerButtonPrimary: { backgroundColor: '#1D9BF0', borderRadius: 12, flex: 2, marginHorizontal: 8 },
 });

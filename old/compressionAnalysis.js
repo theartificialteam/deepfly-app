@@ -270,68 +270,51 @@ export async function analyzeCompression(imageData, width, height) {
   console.log(`[Compression]    Entropy=${quantResult.entropy.toFixed(3)}, Peaks=${quantResult.peaks}`);
   
   // =========================================================================
-  // SCORING LOGIC (v2 - Proportional & More Robust)
+  // SCORING LOGIC (v3 - Re-tuned & Additive Only)
   // =========================================================================
   
   let score = 0;
   const indicators = [];
-  const partScores = {};
+  
+  // --- AI Detection: Block boundary ratio ---
+  // This is a strong signal. Real JPEGs have a ratio > 1. AI images often lack this structure.
+  if (boundaryResult.boundaryRatio < 0.90) {
+    score += 45;
+    indicators.push('Missing JPEG block artifacts (AI)');
+  } else if (boundaryResult.boundaryRatio < 0.97) {
+    score += 25;
+    indicators.push('Weak block boundaries (AI)');
+  }
+  
+  // --- AI Detection: Block variance uniformity ---
   const varianceCV = varianceResult.stdBlockVariance / Math.max(1, varianceResult.avgBlockVariance);
-
-  // --- 1. Block Boundary Score ---
-  // AI images lack JPEG artifacts (ratio < 0.97), Real images have them (ratio > 1.05)
-  partScores.boundary = clamp(100 * (1.05 - boundaryResult.boundaryRatio) / (1.05 - 0.97), 0, 100);
-  if (partScores.boundary > 80) {
-    indicators.push('Missing JPEG block artifacts');
+  if (varianceCV < 0.55) {
+    score += 20;
+    indicators.push('Uniform block variance (AI)');
   }
 
-  // --- 2. Block Variance Uniformity Score ---
-  // AI has uniform variance (cv < 0.55), Real is varied (cv > 0.75)
-  partScores.varianceUniformity = clamp(100 * (0.75 - varianceCV) / (0.75 - 0.55), 0, 100);
-  if (partScores.varianceUniformity > 80) {
-    indicators.push('Uniform block variance (AI pattern)');
+  // --- AI Detection: Inter-block differences ---
+  if (varianceResult.avgInterBlockDiff < 10) {
+    score += 15;
+    indicators.push('Unnaturally smooth block transitions (AI)');
   }
 
-  // --- 3. Inter-block Smoothness Score ---
-  // AI has smooth transitions (diff < 10), Real is less smooth (diff > 15)
-  partScores.smoothness = clamp(100 * (15 - varianceResult.avgInterBlockDiff) / (15 - 6), 0, 100);
-  if (partScores.smoothness > 80) {
-    indicators.push('Unnaturally smooth block transitions');
+  // --- AI Detection: Banding ---
+  if (quantResult.bandingScore > 20) {
+    score += 20;
+    indicators.push('Color banding detected (AI)');
   }
-
-  // --- 4. Histogram Entropy Score ---
-  // AI has low entropy (<6.8), Real has high (>7.0)
-  partScores.entropy = clamp(100 * (7.0 - quantResult.entropy) / (7.0 - 6.0), 0, 100);
-  if (partScores.entropy > 80) {
-    indicators.push('Low color entropy (simplified palette)');
+  
+  // --- AI Detection: Very low block variance ---
+  if (varianceResult.avgBlockVariance < 80) {
+    score += 15;
+    indicators.push('Very smooth texture (AI)');
   }
-
-  // --- 5. Quantization Peaks Score ---
-  // AI has few peaks (<15), Real has more (>25)
-  partScores.peaks = clamp(100 * (25 - quantResult.peaks) / (25 - 8), 0, 100);
-  if (partScores.peaks > 80) {
-    indicators.push('Missing quantization peaks');
-  }
-
-  // --- 6. Color Banding Score ---
-  // AI can have banding (>15), Real does not (<5)
-  partScores.banding = clamp(100 * (quantResult.bandingScore - 5) / (25 - 5), 0, 100);
-  if (partScores.banding > 75) {
-    indicators.push('Color banding detected');
-  }
-
-  // --- 7. Block Detail Score (inverse of variance) ---
-  // AI has low detail/variance (<80), Real has high (>200)
-  partScores.detail = clamp(100 * (200 - varianceResult.avgBlockVariance) / (200 - 40), 0, 100);
-  if (partScores.detail > 85) {
-    indicators.push('Very smooth texture (no natural detail)');
-  }
-
-  // Combine scores by taking the average
-  const finalScore = mean(Object.values(partScores));
-
+  
+  // NOTE: High entropy and peak counts are no longer penalized, as they can be misleading.
+  
   // Clamp final score
-  score = clamp(Math.round(finalScore), 0, 100);
+  score = clamp(Math.round(score), 0, 100);
   
   const processingTime = Date.now() - startTime;
   console.log(`[Compression] ✅ Score: ${score}%, Time: ${processingTime}ms`);

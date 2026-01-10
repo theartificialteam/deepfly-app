@@ -8,6 +8,7 @@ import {
   Alert,
   SafeAreaView,
   Animated,
+  Image,
 } from 'react-native';
 import { Text, Button, Surface, IconButton, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -54,20 +55,25 @@ export default function HomeScreen({ navigation }) {
   const setAnalysisResult = useAppStore((state) => state.setAnalysisResult);
   const updateUserPro = useAppStore((state) => state.updateUserPro);
 
-  const animations = useRef(history.map(() => new Animated.Value(0))).current;
+  // FIX: Use state and effect to sync animations with history data
+  const [itemAnims, setItemAnims] = useState([]);
+  useEffect(() => {
+    setItemAnims(history.map(() => new Animated.Value(0)));
+  }, [history.length]);
 
   useFocusEffect(
     React.useCallback(() => {
+      if (itemAnims.length === 0) return;
       const staggers = history.map((_, i) =>
-        Animated.timing(animations[i], {
+        Animated.timing(itemAnims[i], {
           toValue: 1,
           duration: 300,
-          delay: i * 100,
+          delay: i * 50, // Shorten delay for better UX
           useNativeDriver: true,
         })
       );
-      Animated.stagger(100, staggers).start();
-    }, [history.length])
+      Animated.stagger(50, staggers).start();
+    }, [itemAnims])
   );
   
   const canAnalyze = usageToday < dailyLimit;
@@ -117,10 +123,12 @@ export default function HomeScreen({ navigation }) {
   };
 
   const renderHistoryItem = ({ item, index }) => {
+    // Ensure anim value exists before using it
+    const animValue = itemAnims[index] || new Animated.Value(1); 
     const animStyle = {
-      opacity: animations[index],
+      opacity: animValue,
       transform: [{
-        translateY: animations[index].interpolate({
+        translateY: animValue.interpolate({
           inputRange: [0, 1],
           outputRange: [50, 0],
         }),
@@ -133,7 +141,13 @@ export default function HomeScreen({ navigation }) {
       <Animated.View style={animStyle}>
         <TouchableOpacity onPress={() => handleHistoryItemPress(item)}>
           <Surface style={styles.historyItem} elevation={2}>
-            <View style={[styles.historyIndicator, { backgroundColor: color }]} />
+            {item.thumbnailUri ? (
+              <Image source={{ uri: item.thumbnailUri }} style={styles.historyThumbnail} />
+            ) : (
+              <View style={styles.historyThumbnailPlaceholder}>
+                <MaterialCommunityIcons name={isFake ? 'robot' : 'image-outline'} size={24} color="#404040" />
+              </View>
+            )}
             <View style={styles.historyContent}>
               <Text style={styles.historyTitle} numberOfLines={1}>
                 {item.fileInfo?.name || 'Analysis Result'}
@@ -162,7 +176,10 @@ export default function HomeScreen({ navigation }) {
             {isPro && <Chip style={styles.proBadge} textStyle={styles.proBadgeText}>PRO</Chip>}
           </View>
         </View>
-        <IconButton icon="logout" iconColor="#808080" size={24} onPress={handleLogout} />
+        <View style={{ flexDirection: 'row' }}>
+            <IconButton icon="account-circle-outline" iconColor="#808080" size={28} onPress={() => navigation.navigate('UserProfile')} />
+            <IconButton icon="logout" iconColor="#808080" size={28} onPress={handleLogout} />
+        </View>
       </View>
 
       {/* Usage Card */}
@@ -261,9 +278,24 @@ const styles = StyleSheet.create({
   ctaButton: { marginTop: 16, backgroundColor: '#A78BFA', borderRadius: 12 },
   ctaLabel: { fontSize: 15, fontWeight: 'bold' },
   sectionTitle: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginBottom: 12 },
-  historyItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#252525', overflow: 'hidden' },
-  historyIndicator: { width: 6, height: '100%' },
-  historyContent: { flex: 1, padding: 14 },
+  historyItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1A1A1A', borderRadius: 16, padding: 12, marginBottom: 10, borderWidth: 1, borderColor: '#252525' },
+  historyThumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    marginRight: 12,
+    backgroundColor: '#222222',
+  },
+  historyThumbnailPlaceholder: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    marginRight: 12,
+    backgroundColor: '#222222',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  historyContent: { flex: 1, paddingVertical: 4 },
   historyTitle: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   historyDate: { color: '#606060', fontSize: 12, marginTop: 4 },
   historyRight: { alignItems: 'flex-end', marginRight: 8 },

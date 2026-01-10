@@ -204,68 +204,46 @@ export async function analyzeNoise(imageData, width, height) {
   console.log(`[Noise]    Dynamic range=${noiseDynamicRange.toFixed(2)}`);
   
   // =========================================================================
-  // SCORING LOGIC (v2 - Proportional & More Robust)
+  // SCORING LOGIC (v3 - Re-tuned & Additive Only)
   // =========================================================================
   
+  let score = 0;
   const indicators = [];
-  const partScores = {};
 
-  // --- 1. Noise Variance Score ---
-  // AI has low variance (<12), Real has high (>22)
-  partScores.variance = clamp(100 * (22 - noiseStd) / (22 - 8), 0, 100);
-  if (partScores.variance > 85) {
-    indicators.push('Unusually low noise level');
-  }
-
-  // --- 2. Kurtosis Score ---
-  // Real is Gaussian (~3), AI is not. Score based on deviation from 3.
+  // --- AI Detection: Kurtosis ---
+  // Natural camera noise is Gaussian (kurtosis ≈ 3). High deviation is a strong AI signal.
   const kurtosisDeviation = Math.abs(noiseKurtosis - 3);
-  partScores.kurtosis = clamp(100 * (kurtosisDeviation - 0.8) / (4.0 - 0.8), 0, 100);
-  if (partScores.kurtosis > 75) {
-    indicators.push('Non-Gaussian noise distribution');
+  if (kurtosisDeviation > 10) { // Very high deviation from log data (13.2)
+    score += 50;
+    indicators.push('Highly Non-Gaussian noise distribution (AI)');
+  } else if (kurtosisDeviation > 4) {
+    score += 30;
+    indicators.push('Non-Gaussian noise distribution (AI)');
   }
 
-  // --- 3. Skewness Score ---
-  // Real is symmetric (~0), AI is not. Score based on deviation from 0.
-  const skewnessDeviation = Math.abs(noiseSkewness);
-  partScores.skewness = clamp(100 * (skewnessDeviation - 0.4) / (2.0 - 0.4), 0, 100);
-  if (partScores.skewness > 75) {
-    indicators.push('Asymmetric noise distribution');
+  // --- AI Detection: Noise uniformity ---
+  // AI images can have very uniform noise across patches.
+  if (noiseUniformity < 0.45) {
+    score += 25;
+    indicators.push('Abnormally uniform noise pattern (AI)');
   }
 
-  // --- 4. Noise Uniformity Score ---
-  // AI is uniform (<0.45), Real is varied (>0.65).
-  partScores.uniformity = clamp(100 * (0.65 - noiseUniformity) / (0.65 - 0.45), 0, 100);
-  if (partScores.uniformity > 80) {
-    indicators.push('Abnormally uniform noise pattern');
+  // --- AI Detection: Low noise variance ---
+  // While some AIs add noise, many still produce images with low noise.
+  if (noiseStd < 8) {
+    score += 30;
+    indicators.push('Unusually low noise level (AI)');
   }
 
-  // --- 5. Patch Variance Uniformity Score ---
-  // AI has uniform complexity (patchUniformity < 0.4), Real is varied (>0.9)
-  partScores.patchUniformity = clamp(100 * (0.9 - patchUniformity) / (0.9 - 0.4), 0, 100);
-  if (partScores.patchUniformity > 80) {
-    indicators.push('Uniform patch complexity');
-  }
-
-  // --- 6. Dynamic Range Score ---
-  // AI has narrow range (<5), Real has wide (>8)
-  partScores.dynamicRange = clamp(100 * (8 - noiseDynamicRange) / (8 - 2), 0, 100);
-  if (partScores.dynamicRange > 85) {
+  // --- AI Detection: Dynamic range ---
+  // AI noise often has narrow dynamic range.
+  if (noiseDynamicRange < 5) {
+    score += 20;
     indicators.push('Very narrow noise range (synthetic)');
   }
-
-  // --- 7. Noise Floor Score ---
-  // AI has low floor (<1.5), Real has higher (>2.5)
-  partScores.noiseFloor = clamp(100 * (2.5 - noiseFloor) / (2.5 - 0.5), 0, 100);
-  if (partScores.noiseFloor > 85) {
-    indicators.push('Zero noise floor (no camera noise)');
-  }
-
-  // Combine scores by taking the average
-  const finalScore = mean(Object.values(partScores));
-
+  
   // Clamp final score
-  const score = clamp(Math.round(finalScore), 0, 100);
+  score = clamp(Math.round(score), 0, 100);
   
   const processingTime = Date.now() - startTime;
   console.log(`[Noise] ✅ Score: ${score}%, Time: ${processingTime}ms`);

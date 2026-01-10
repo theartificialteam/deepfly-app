@@ -49,3 +49,10 @@ coverage/
 # Build outputs
 android/app/build/
 ios/Pods/
+
+# Python / Backend
+.venv/
+__pycache__/
+*.pyc
+hf_cache/
+*.h5

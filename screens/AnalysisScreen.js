@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   Easing,
 } from 'react-native';
-import { Text, Surface, ActivityIndicator } from 'react-native-paper';
+import { Text, Surface, ActivityIndicator, Button } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { detectDeepfakeInFile } from '../services/detectionService';

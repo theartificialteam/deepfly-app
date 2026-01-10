@@ -200,59 +200,51 @@ export async function analyzeFrequency(imageData, width, height) {
   console.log(`[Frequency]    Artifact ratio=${(artifactRatio * 100).toFixed(1)}%`);
   
   // =========================================================================
-  // SCORING LOGIC (v2 - Proportional & More Robust)
+  // SCORING LOGIC (v3 - Re-tuned & Additive Only)
   // =========================================================================
   
+  let score = 0;
   const indicators = [];
-  const partScores = {};
+  
+  // Based on new logs, some AI images have very HIGH complexity and CV, not just low.
+  // This logic now treats extremes (both low and high) as suspicious.
 
-  // --- 1. Complexity Score ---
-  // Real images have varied complexity (>0.4); AI images are more uniform (<0.15).
-  partScores.complexity = clamp(100 * (0.4 - avgComplexity) / (0.4 - 0.15), 0, 100);
-  if (partScores.complexity > 80) {
-    indicators.push('Very low frequency complexity (AI signature)');
+  // --- Complexity Score (Low OR High is suspicious) ---
+  if (avgComplexity < 0.15) {
+    score += 35;
+    indicators.push('Very low frequency complexity (AI)');
+  } else if (avgComplexity > 1.0) {
+    score += 25;
+    indicators.push('Abnormally high frequency complexity (AI)');
   }
 
-  // --- 2. AC Uniformity Score (based on Coefficient of Variation) ---
-  // Real images have varied texture energy (cvAC > 0.6); AI is uniform (cvAC < 0.4).
-  partScores.acUniformity = clamp(100 * (0.6 - cvAC) / (0.6 - 0.4), 0, 100);
-  if (partScores.acUniformity > 80) {
-    indicators.push('Abnormally uniform texture energy');
+  // --- AC Uniformity Score (Low CV is suspicious) ---
+  if (cvAC < 0.4) {
+    score += 30;
+    indicators.push('Abnormally uniform texture energy (AI)');
   }
 
-  // --- 3. Block Complexity Uniformity Score (based on standard deviation) ---
-  // Real images have varied block complexity (stdComplexity > 0.25); AI is uniform (stdComplexity < 0.12).
-  partScores.blockUniformity = clamp(100 * (0.25 - stdComplexity) / (0.25 - 0.12), 0, 100);
-  if (partScores.blockUniformity > 80) {
-    indicators.push('Uniform block complexity (AI pattern)');
+  // --- Block Complexity Uniformity Score ---
+  if (stdComplexity < 0.12) {
+    score += 20;
+    indicators.push('Uniform block complexity (AI)');
+  }
+  
+  // --- Periodic Artifacts Score ---
+  if (artifactRatio > 0.10) { // More sensitive threshold
+    score += 30;
+    indicators.push('High periodic artifact density (AI)');
   }
 
-  // --- 4. Periodic Artifacts Score ---
-  // Real images have few artifacts (<3%); AI can have many (>12%).
-  partScores.artifacts = clamp(100 * (artifactRatio - 0.03) / (0.12 - 0.03), 0, 100);
-  if (partScores.artifacts > 75) {
-    indicators.push('High periodic artifact density');
+  // --- Brightness Uniformity Score ---
+  const dcCV = stdDC / Math.max(1, avgDC);
+  if (dcCV < 0.18) {
+    score += 15;
+    indicators.push('Uniform brightness distribution (AI)');
   }
-
-  // --- 5. Brightness Uniformity Score (based on DC Coefficient of Variation) ---
-  // Real images have varied brightness (dcCV > 0.25); AI is more uniform (dcCV < 0.18).
-  partScores.brightnessUniformity = clamp(100 * (0.25 - dcCV) / (0.25 - 0.18), 0, 100);
-  if (partScores.brightnessUniformity > 80) {
-    indicators.push('Uniform brightness distribution');
-  }
-
-  // --- 6. High-Frequency Detail Score ---
-  // Real images have rich details (avgAC > 80); AI often lacks them (avgAC < 40).
-  partScores.hfDetail = clamp(100 * (80 - avgAC) / (80 - 40), 0, 100);
-  if (partScores.hfDetail > 80) {
-    indicators.push('Missing high-frequency details');
-  }
-
-  // Combine scores by taking the average
-  const finalScore = mean(Object.values(partScores));
   
   // Clamp final score
-  const score = clamp(Math.round(finalScore), 0, 100);
+  score = clamp(Math.round(score), 0, 100);
   
   const processingTime = Date.now() - startTime;
   console.log(`[Frequency] ✅ Score: ${score}%, Time: ${processingTime}ms`);
