@@ -1,404 +1,163 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
   Image,
-  ScrollView,
   Alert,
-  Dimensions,
+  SafeAreaView,
+  TouchableOpacity,
+  Platform,
+  UIManager,
+  LayoutAnimation,
 } from 'react-native';
-import {
-  Text,
-  Button,
-  Surface,
-  IconButton,
-  Chip,
-} from 'react-native-paper';
+import { Text, Button, Surface, IconButton, ActivityIndicator } from 'react-native-paper';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-
 import { useAppStore } from '../store/appStore';
 
-const { width } = Dimensions.get('window');
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const formatBytes = (bytes, decimals = 2) => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+};
 
 export default function UploadScreen({ navigation }) {
   const [selectedFile, setSelectedFile] = useState(null);
-  const [fileType, setFileType] = useState(null);
-  const [fileInfo, setFileInfo] = useState(null);
-  const [thumbnail, setThumbnail] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(null); // 'gallery', 'camera', or null
 
   const setCurrentAnalysis = useAppStore((state) => state.setCurrentAnalysis);
 
-  const getFileInfo = async (uri, asset) => {
-    try {
-      const fileName = uri.split('/').pop();
-      // Use asset info if available (from ImagePicker)
-      const fileSize = asset?.fileSize || 0;
-      const sizeInMB = (fileSize / (1024 * 1024)).toFixed(2);
-      return {
-        name: fileName,
-        size: fileSize > 0 ? `${sizeInMB} MB` : 'Unknown',
-        sizeBytes: fileSize,
-        uri: uri,
-      };
-    } catch (error) {
-      console.error('Error getting file info:', error);
-      return {
-        name: 'Unknown',
-        size: 'Unknown',
-        uri: uri,
-      };
-    }
-  };
+  useEffect(() => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+  }, [selectedFile]);
 
-  const generateVideoThumbnail = async (videoUri) => {
+  const handleMediaPick = async (source) => {
+    const isCamera = source === 'camera';
+    setLoading(source);
     try {
-      const { uri } = await VideoThumbnails.getThumbnailAsync(videoUri, {
-        time: 1000, // 1 second into the video
-        quality: 0.7,
-      });
-      return uri;
-    } catch (error) {
-      console.error('Error generating thumbnail:', error);
-      return null;
-    }
-  };
-
-  const pickImage = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+      const permissionFn = isCamera ? ImagePicker.requestCameraPermissionsAsync : ImagePicker.requestMediaLibraryPermissionsAsync;
+      const permissionResult = await permissionFn();
       if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your photo library.');
+        Alert.alert('Permission Required', `Please allow access to your ${isCamera ? 'camera' : 'photo library'}.`);
+        setLoading(null);
         return;
       }
-
-      setLoading(true);
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
+      
+      const launchFn = isCamera ? ImagePicker.launchCameraAsync : ImagePicker.launchImageLibraryAsync;
+      const result = await launchFn({
+        mediaTypes: ImagePicker.MediaTypeOptions.All,
         quality: 1,
+        videoMaxDuration: 60,
       });
 
       if (!result.canceled && result.assets[0]) {
         const asset = result.assets[0];
-        const info = await getFileInfo(asset.uri, asset);
+        const thumbUri = asset.type === 'video' ? (await VideoThumbnails.getThumbnailAsync(asset.uri, { time: 1000 })).uri : asset.uri;
         
-        setSelectedFile(asset.uri);
-        setFileType('image');
-        setFileInfo(info);
-        setThumbnail(asset.uri);
+        setSelectedFile({
+          uri: asset.uri,
+          type: asset.type,
+          name: asset.uri.split('/').pop(),
+          size: asset.fileSize ? formatBytes(asset.fileSize) : 'Unknown',
+          thumbnail: thumbUri,
+        });
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      Alert.alert('Error', `Failed to ${isCamera ? 'take photo' : 'pick media'}.`);
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
-  };
-
-  const pickVideo = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your photo library.');
-        return;
-      }
-
-      setLoading(true);
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-        allowsEditing: false,
-        quality: 1,
-        videoMaxDuration: 60, // Max 60 seconds for performance
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const info = await getFileInfo(asset.uri, asset);
-        const thumbUri = await generateVideoThumbnail(asset.uri);
-        
-        setSelectedFile(asset.uri);
-        setFileType('video');
-        setFileInfo(info);
-        setThumbnail(thumbUri);
-      }
-    } catch (error) {
-      console.error('Error picking video:', error);
-      Alert.alert('Error', 'Failed to pick video. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const takePhoto = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your camera.');
-        return;
-      }
-
-      setLoading(true);
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: false,
-        quality: 1,
-      });
-
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        const info = await getFileInfo(asset.uri, asset);
-        
-        setSelectedFile(asset.uri);
-        setFileType('image');
-        setFileInfo(info);
-        setThumbnail(asset.uri);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const clearSelection = () => {
-    setSelectedFile(null);
-    setFileType(null);
-    setFileInfo(null);
-    setThumbnail(null);
   };
 
   const startAnalysis = () => {
-    if (!selectedFile || !fileType) {
-      Alert.alert('No File Selected', 'Please select an image or video first.');
-      return;
-    }
-
-    // Store in Zustand
+    if (!selectedFile) return;
     setCurrentAnalysis({
-      file: selectedFile,
-      fileType: fileType,
-      fileInfo: fileInfo,
-      startedAt: Date.now(),
+      file: selectedFile.uri,
+      fileType: selectedFile.type,
+      fileInfo: { name: selectedFile.name, size: selectedFile.size },
     });
-
-    // Navigate to analysis screen
     navigation.navigate('Analysis', {
-      file: selectedFile,
-      fileType: fileType,
-      fileInfo: fileInfo,
+      file: selectedFile.uri,
+      fileType: selectedFile.type,
+      fileInfo: { name: selectedFile.name, size: selectedFile.size },
     });
   };
 
-  return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Upload Options */}
-      {!selectedFile && (
-        <View style={styles.uploadSection}>
-          <Text style={styles.sectionTitle}>Choose Media Source</Text>
-          
-          <View style={styles.optionsGrid}>
-            <Surface style={styles.optionCard} elevation={2}>
-              <IconButton
-                icon="image"
-                size={40}
-                iconColor="#FF6B6B"
-                style={styles.optionIcon}
-                onPress={pickImage}
-                loading={loading}
-              />
-              <Text style={styles.optionTitle}>Gallery Image</Text>
-              <Text style={styles.optionDescription}>
-                Select a photo from your library
-              </Text>
-              <Button
-                mode="outlined"
-                onPress={pickImage}
-                style={styles.optionButton}
-                textColor="#FF6B6B"
-                loading={loading}
-              >
-                Browse
-              </Button>
-            </Surface>
+  const renderSelection = () => (
+    <View style={styles.selectionContainer}>
+      <Text style={styles.title}>Select Media</Text>
+      <Text style={styles.subtitle}>Choose an image or video to analyze for AI manipulation.</Text>
+      
+      <TouchableOpacity style={styles.optionButton} onPress={() => handleMediaPick('gallery')} disabled={!!loading}>
+        <Surface style={styles.optionSurface} elevation={3}>
+          {loading === 'gallery' ? <ActivityIndicator color="#A78BFA" /> : <MaterialCommunityIcons name="image-multiple-outline" size={32} color="#A78BFA" />}
+          <Text style={styles.optionTitle}>Choose from Gallery</Text>
+          <Text style={styles.optionDescription}>Select a photo or video</Text>
+        </Surface>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={styles.optionButton} onPress={() => handleMediaPick('camera')} disabled={!!loading}>
+        <Surface style={styles.optionSurface} elevation={3}>
+          {loading === 'camera' ? <ActivityIndicator color="#A78BFA" /> : <MaterialCommunityIcons name="camera-outline" size={32} color="#A78BFA" />}
+          <Text style={styles.optionTitle}>Use Camera</Text>
+          <Text style={styles.optionDescription}>Take a new photo</Text>
+        </Surface>
+      </TouchableOpacity>
+    </View>
+  );
 
-            <Surface style={styles.optionCard} elevation={2}>
-              <IconButton
-                icon="video"
-                size={40}
-                iconColor="#FF6B6B"
-                style={styles.optionIcon}
-                onPress={pickVideo}
-                loading={loading}
-              />
-              <Text style={styles.optionTitle}>Gallery Video</Text>
-              <Text style={styles.optionDescription}>
-                Select a video (max 60s)
-              </Text>
-              <Button
-                mode="outlined"
-                onPress={pickVideo}
-                style={styles.optionButton}
-                textColor="#FF6B6B"
-                loading={loading}
-              >
-                Browse
-              </Button>
-            </Surface>
+  const renderPreview = () => (
+    <View style={styles.previewContainer}>
+      <Text style={styles.title}>Confirm Selection</Text>
+      <Surface style={styles.previewCard} elevation={4}>
+        <Image source={{ uri: selectedFile.thumbnail }} style={styles.thumbnail} />
+        {selectedFile.type === 'video' && (
+          <View style={styles.videoOverlay}>
+            <MaterialCommunityIcons name="play-circle-outline" size={60} color="rgba(255,255,255,0.8)" />
           </View>
-
-          <Surface style={styles.cameraCard} elevation={2}>
-            <View style={styles.cameraContent}>
-              <MaterialCommunityIcons
-                name="camera"
-                size={32}
-                color="#FF6B6B"
-              />
-              <View style={styles.cameraTextContainer}>
-                <Text style={styles.optionTitle}>Take New Photo</Text>
-                <Text style={styles.optionDescription}>
-                  Capture a photo with your camera
-                </Text>
-              </View>
-              <Button
-                mode="contained"
-                onPress={takePhoto}
-                style={styles.cameraButton}
-                loading={loading}
-              >
-                Capture
-              </Button>
-            </View>
-          </Surface>
-        </View>
-      )}
-
-      {/* Selected File Preview */}
-      {selectedFile && (
-        <View style={styles.previewSection}>
-          <View style={styles.previewHeader}>
-            <Text style={styles.sectionTitle}>Selected Media</Text>
-            <IconButton
-              icon="close-circle"
-              size={24}
-              iconColor="#808080"
-              onPress={clearSelection}
-            />
-          </View>
-
-          <Surface style={styles.previewCard} elevation={3}>
-            {/* Thumbnail/Preview */}
-            <View style={styles.thumbnailContainer}>
-              {thumbnail && (
-                <Image
-                  source={{ uri: thumbnail }}
-                  style={styles.thumbnail}
-                  resizeMode="cover"
-                />
-              )}
-              {fileType === 'video' && (
-                <View style={styles.videoOverlay}>
-                  <MaterialCommunityIcons
-                    name="play-circle"
-                    size={48}
-                    color="#FFFFFF"
-                  />
-                </View>
-              )}
-            </View>
-
-            {/* File Type Badge */}
-            <View style={styles.fileTypeBadge}>
-              <Chip
-                icon={fileType === 'video' ? 'video' : 'image'}
-                style={styles.typeChip}
-                textStyle={styles.typeChipText}
-              >
-                {fileType === 'video' ? 'Video' : 'Image'}
-              </Chip>
-            </View>
-
-            {/* File Info */}
-            {fileInfo && (
-              <View style={styles.fileInfoContainer}>
-                <View style={styles.fileInfoRow}>
-                  <MaterialCommunityIcons
-                    name="file-document-outline"
-                    size={18}
-                    color="#808080"
-                  />
-                  <Text style={styles.fileInfoLabel}>File Name</Text>
-                </View>
-                <Text style={styles.fileInfoValue} numberOfLines={1}>
-                  {fileInfo.name}
-                </Text>
-
-                <View style={[styles.fileInfoRow, { marginTop: 12 }]}>
-                  <MaterialCommunityIcons
-                    name="harddisk"
-                    size={18}
-                    color="#808080"
-                  />
-                  <Text style={styles.fileInfoLabel}>File Size</Text>
-                </View>
-                <Text style={styles.fileInfoValue}>{fileInfo.size}</Text>
-              </View>
-            )}
-          </Surface>
-
-          {/* Analysis Info */}
-          <Surface style={styles.infoCard} elevation={1}>
-            <MaterialCommunityIcons
-              name="information"
-              size={20}
-              color="#FF6B6B"
-            />
-            <Text style={styles.infoText}>
-              Analysis will use 4 AI models to detect potential deepfake 
-              manipulation. All processing happens locally on your device.
-            </Text>
-          </Surface>
-
-          {/* Analyze Button */}
-          <Button
-            mode="contained"
-            onPress={startAnalysis}
-            style={styles.analyzeButton}
-            contentStyle={styles.analyzeButtonContent}
-            labelStyle={styles.analyzeButtonLabel}
-            icon="magnify-scan"
-          >
-            Analyze for Deepfakes
-          </Button>
-        </View>
-      )}
-
-      {/* Tips Section */}
-      <Surface style={styles.tipsCard} elevation={1}>
-        <Text style={styles.tipsTitle}>💡 Tips for Best Results</Text>
-        <View style={styles.tipRow}>
-          <MaterialCommunityIcons name="check" size={16} color="#10B981" />
-          <Text style={styles.tipText}>Use clear, well-lit images</Text>
-        </View>
-        <View style={styles.tipRow}>
-          <MaterialCommunityIcons name="check" size={16} color="#10B981" />
-          <Text style={styles.tipText}>Face should be clearly visible</Text>
-        </View>
-        <View style={styles.tipRow}>
-          <MaterialCommunityIcons name="check" size={16} color="#10B981" />
-          <Text style={styles.tipText}>Higher resolution = better accuracy</Text>
-        </View>
-        <View style={styles.tipRow}>
-          <MaterialCommunityIcons name="check" size={16} color="#10B981" />
-          <Text style={styles.tipText}>Videos under 60 seconds work best</Text>
+        )}
+        <IconButton icon="close-circle" style={styles.clearButton} iconColor="rgba(0,0,0,0.6)" size={30} onPress={() => setSelectedFile(null)} />
+        <View style={styles.fileInfo}>
+          <Text style={styles.fileName} numberOfLines={1}>{selectedFile.name}</Text>
+          <Text style={styles.fileSize}>{selectedFile.type.charAt(0).toUpperCase() + selectedFile.type.slice(1)} • {selectedFile.size}</Text>
         </View>
       </Surface>
-    </ScrollView>
+      <Button
+        mode="contained"
+        onPress={startAnalysis}
+        style={styles.analyzeButton}
+        contentStyle={styles.analyzeButtonContent}
+        labelStyle={styles.analyzeButtonLabel}
+        icon="magnify-scan"
+      >
+        Analyze Now
+      </Button>
+    </View>
+  );
+  
+  return (
+    <SafeAreaView style={styles.container}>
+      {selectedFile ? renderPreview() : renderSelection()}
+      
+      {/* Tips Section */}
+      <Surface style={styles.tipsCard} elevation={1}>
+        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 8}}>
+            <MaterialCommunityIcons name="lightbulb-on-outline" size={20} color="#FFD700" />
+            <Text style={styles.tipsTitle}>Tips for Best Results</Text>
+        </View>
+        <Text style={styles.tipText}>• Use clear, well-lit images or videos.</Text>
+        <Text style={styles.tipText}>• Faces should be clearly visible.</Text>
+        <Text style={styles.tipText}>• Videos under 60 seconds work best.</Text>
+      </Surface>
+    </SafeAreaView>
   );
 }
 
@@ -406,187 +165,119 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0D0D0D',
+    justifyContent: 'space-between',
+    padding: 20,
   },
-  content: {
-    padding: 16,
-    paddingBottom: 40,
+  selectionContainer: {
+      flex: 1,
+      justifyContent: 'center',
   },
-  sectionTitle: {
-    fontSize: 18,
+  previewContainer: {
+      flex: 1,
+      justifyContent: 'center',
+  },
+  title: {
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 16,
-  },
-  uploadSection: {
-    marginBottom: 20,
-  },
-  optionsGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  optionCard: {
-    width: (width - 44) / 2,
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#252525',
-  },
-  optionIcon: {
-    backgroundColor: '#FF6B6B15',
+    textAlign: 'center',
     marginBottom: 8,
   },
-  optionTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 4,
+  subtitle: {
+    fontSize: 16,
+    color: '#A0A0A0',
     textAlign: 'center',
-  },
-  optionDescription: {
-    fontSize: 12,
-    color: '#808080',
-    textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 40,
   },
   optionButton: {
-    borderColor: '#FF6B6B',
-    borderRadius: 8,
-  },
-  cameraCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#252525',
-  },
-  cameraContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  cameraTextContainer: {
-    flex: 1,
-    marginLeft: 16,
-  },
-  cameraButton: {
-    backgroundColor: '#FF6B6B',
-    borderRadius: 8,
-  },
-  previewSection: {
+    borderRadius: 20,
     marginBottom: 20,
   },
-  previewHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 0,
-  },
-  previewCard: {
+  optionSurface: {
     backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    overflow: 'hidden',
+    borderRadius: 20,
+    padding: 24,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: '#252525',
   },
-  thumbnailContainer: {
-    width: '100%',
-    height: 250,
-    backgroundColor: '#0D0D0D',
-    position: 'relative',
+  optionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 12,
+  },
+  optionDescription: {
+    fontSize: 14,
+    color: '#808080',
+    marginTop: 4,
+  },
+  previewCard: {
+    borderRadius: 20,
+    backgroundColor: '#1A1A1A',
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: '#252525',
   },
   thumbnail: {
     width: '100%',
-    height: '100%',
+    height: 250,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    backgroundColor: '#000',
   },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  fileTypeBadge: {
+  clearButton: {
     position: 'absolute',
-    top: 12,
-    right: 12,
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
-  typeChip: {
-    backgroundColor: '#FF6B6B',
-  },
-  typeChipText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-  },
-  fileInfoContainer: {
+  fileInfo: {
     padding: 16,
   },
-  fileInfoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+  fileName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  fileInfoLabel: {
-    fontSize: 12,
-    color: '#808080',
-    marginLeft: 8,
-  },
-  fileInfoValue: {
+  fileSize: {
     fontSize: 14,
-    color: '#FFFFFF',
-    marginLeft: 26,
-  },
-  infoCard: {
-    backgroundColor: '#FF6B6B10',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#FF6B6B30',
-  },
-  infoText: {
-    fontSize: 13,
-    color: '#A0A0A0',
-    marginLeft: 12,
-    flex: 1,
-    lineHeight: 18,
+    color: '#808080',
+    marginTop: 4,
   },
   analyzeButton: {
-    marginTop: 20,
-    borderRadius: 12,
-    backgroundColor: '#FF6B6B',
+    borderRadius: 16,
+    backgroundColor: '#A78BFA',
   },
   analyzeButtonContent: {
-    height: 56,
+    height: 60,
   },
   analyzeButtonLabel: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   tipsCard: {
     backgroundColor: '#1A1A1A',
     borderRadius: 16,
     padding: 16,
-    marginTop: 8,
     borderWidth: 1,
     borderColor: '#252525',
+    marginTop: 20
   },
   tipsTitle: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  tipRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+    marginLeft: 8,
   },
   tipText: {
     fontSize: 13,
-    color: '#808080',
-    marginLeft: 8,
+    color: '#A0A0A0',
+    lineHeight: 20,
   },
 });
-

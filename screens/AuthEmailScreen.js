@@ -1,15 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
-  Alert,
+  Animated,
+  SafeAreaView,
 } from 'react-native';
-import { Text, Button, TextInput, Surface } from 'react-native-paper';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Text, Button, TextInput, IconButton } from 'react-native-paper';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { useAppStore } from '../store/appStore';
 
@@ -17,9 +17,29 @@ export default function AuthEmailScreen({ navigation }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   const setUser = useAppStore((state) => state.setUser);
+  
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  useEffect(() => {
+    Animated.stagger(100, [
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 500,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 30,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, []);
 
   const validateEmail = (email) => {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,26 +47,23 @@ export default function AuthEmailScreen({ navigation }) {
   };
 
   const handleSubmit = async () => {
-    // Basic validation
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your email address.');
+    setError('');
+    if (!email.trim() || !password.trim()) {
+      setError('Please fill in all fields.');
       return;
     }
     if (!validateEmail(email)) {
-      Alert.alert('Error', 'Please enter a valid email address.');
+      setError('Please enter a valid email address.');
       return;
     }
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters.');
+      setError('Password must be at least 6 characters.');
       return;
     }
 
     setLoading(true);
-
-    // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 800));
 
-    // Mock auth - no real backend
     const emailPrefix = email.split('@')[0];
     const userId = `user-${Date.now()}`;
 
@@ -59,116 +76,91 @@ export default function AuthEmailScreen({ navigation }) {
     });
 
     setLoading(false);
-    // Navigation happens automatically via App.js conditional rendering
   };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <LinearGradient colors={['#1A1A2E', '#0D0D0D']} style={styles.gradient} />
+
+      <IconButton
+        icon="arrow-left"
+        iconColor="#FFFFFF"
+        size={24}
+        onPress={() => navigation.goBack()}
+        style={styles.backButton}
+      />
       
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={{ flex: 1, width: '100%' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.iconWrapper}>
-            <MaterialCommunityIcons
-              name="account-circle"
-              size={48}
-              color="#FF6B6B"
-            />
-          </View>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>
-            Sign up to get 20 free analyses per day and sync your history across devices.
-          </Text>
-        </View>
-
-        {/* Form */}
-        <Surface style={styles.formCard} elevation={2}>
-          <TextInput
-            mode="outlined"
-            label="Email"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={styles.input}
-            outlineColor="#404040"
-            activeOutlineColor="#FF6B6B"
-            textColor="#FFFFFF"
-            left={<TextInput.Icon icon="email" color="#808080" />}
-          />
-
-          <TextInput
-            mode="outlined"
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            style={styles.input}
-            outlineColor="#404040"
-            activeOutlineColor="#FF6B6B"
-            textColor="#FFFFFF"
-            left={<TextInput.Icon icon="lock" color="#808080" />}
-            right={
-              <TextInput.Icon
-                icon={showPassword ? 'eye-off' : 'eye'}
-                color="#808080"
-                onPress={() => setShowPassword(!showPassword)}
-              />
-            }
-          />
-
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            style={styles.submitButton}
-            contentStyle={styles.submitButtonContent}
-            labelStyle={styles.submitButtonLabel}
-            loading={loading}
-            disabled={loading}
-          >
-            {loading ? 'Creating Account...' : 'Create Account / Log In'}
-          </Button>
-        </Surface>
-
-        {/* Benefits */}
-        <View style={styles.benefitsContainer}>
-          <Text style={styles.benefitsTitle}>Free Account Benefits</Text>
-          
-          {[
-            { icon: 'chart-line', text: '20 analyses per day' },
-            { icon: 'history', text: 'Analysis history saved' },
-            { icon: 'cloud-sync', text: 'Sync across devices (coming soon)' },
-          ].map((benefit, index) => (
-            <View key={index} style={styles.benefitRow}>
-              <MaterialCommunityIcons
-                name={benefit.icon}
-                size={18}
-                color="#10B981"
-              />
-              <Text style={styles.benefitText}>{benefit.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Back button */}
-        <Button
-          mode="text"
-          onPress={() => navigation.goBack()}
-          textColor="#808080"
-          style={styles.backButton}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          ← Back to options
-        </Button>
-      </ScrollView>
-    </KeyboardAvoidingView>
+          {/* Header */}
+          <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <Text style={styles.title}>Create or Log In</Text>
+            <Text style={styles.subtitle}>
+              Get 20 free analyses per day and sync your history.
+            </Text>
+          </Animated.View>
+
+          {/* Form */}
+          <Animated.View style={[styles.formContainer, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <TextInput
+              mode="outlined"
+              label="Email"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              activeOutlineColor="#A78BFA"
+              textColor="#FFFFFF"
+              left={<TextInput.Icon icon="email-outline" color="#808080" />}
+            />
+
+            <TextInput
+              mode="outlined"
+              label="Password"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              style={styles.input}
+              outlineStyle={styles.inputOutline}
+              activeOutlineColor="#A78BFA"
+              textColor="#FFFFFF"
+              left={<TextInput.Icon icon="lock-outline" color="#808080" />}
+              right={
+                <TextInput.Icon
+                  icon={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  color="#808080"
+                  onPress={() => setShowPassword(!showPassword)}
+                />
+              }
+            />
+
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+            <Button
+              mode="contained"
+              onPress={handleSubmit}
+              style={styles.submitButton}
+              contentStyle={styles.submitButtonContent}
+              labelStyle={styles.submitButtonLabel}
+              loading={loading}
+              disabled={loading}
+            >
+              {loading ? 'Processing...' : 'Continue'}
+            </Button>
+          </Animated.View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -176,85 +168,69 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0D0D0D',
+    alignItems: 'center',
+  },
+  gradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  backButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 44 : 20,
+    left: 10,
+    zIndex: 1,
   },
   scrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
     paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
+    width: '100%',
   },
   header: {
     alignItems: 'center',
-    marginBottom: 32,
-  },
-  iconWrapper: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FF6B6B15',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 40,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 8,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 15,
     color: '#A0A0A0',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 22,
   },
-  formCard: {
-    backgroundColor: '#1A1A1A',
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 24,
+  formContainer: {},
+  input: {
+    backgroundColor: 'rgba(26, 26, 26, 0.8)',
+    marginBottom: 16,
+  },
+  inputOutline: {
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#252525',
   },
-  input: {
+  errorText: {
+    color: '#FF6B6B',
+    textAlign: 'center',
     marginBottom: 16,
-    backgroundColor: '#0D0D0D',
   },
   submitButton: {
-    borderRadius: 12,
-    backgroundColor: '#FF6B6B',
+    borderRadius: 16,
+    backgroundColor: '#A78BFA',
     marginTop: 8,
   },
   submitButtonContent: {
-    height: 52,
+    height: 56,
   },
   submitButtonLabel: {
     fontSize: 16,
     fontWeight: 'bold',
   },
-  benefitsContainer: {
-    marginBottom: 24,
-  },
-  benefitsTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  benefitRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  benefitText: {
-    fontSize: 13,
-    color: '#A0A0A0',
-    marginLeft: 8,
-  },
-  backButton: {
-    marginTop: 8,
-  },
 });
+
+
+
+
 

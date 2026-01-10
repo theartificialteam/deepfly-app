@@ -3,288 +3,134 @@ import {
   View,
   StyleSheet,
   Animated,
-  Dimensions,
   StatusBar,
+  SafeAreaView,
+  Easing,
 } from 'react-native';
-import { Text, ProgressBar, Surface } from 'react-native-paper';
+import { Text, Surface, ActivityIndicator } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-
 import { detectDeepfakeInFile } from '../services/detectionService';
 import { useAppStore } from '../store/appStore';
 
-const { width } = Dimensions.get('window');
-
+// NEW: Stages that accurately reflect the analysis pipeline
 const ANALYSIS_STAGES = [
-  { id: 1, label: 'Loading AI models...', icon: 'brain', range: [0, 0.20] },
-  { id: 2, label: 'Preparing frames...', icon: 'image-filter-frames', range: [0.20, 0.40] },
-  { id: 3, label: 'Running face detection...', icon: 'face-recognition', range: [0.40, 0.55] },
-  { id: 4, label: 'Analyzing facial features...', icon: 'chart-scatter-plot', range: [0.55, 0.70] },
-  { id: 5, label: 'Running liveness check...', icon: 'eye-check', range: [0.70, 0.85] },
-  { id: 6, label: 'Computing ensemble score...', icon: 'calculator', range: [0.85, 0.95] },
-  { id: 7, label: 'Preparing results...', icon: 'check-circle', range: [0.95, 1.0] },
+  { key: 'init', label: 'Initializing Engine...', icon: 'power-plug-outline', range: [0, 0.15] },
+  { key: 'load', label: 'Loading Media Frames...', icon: 'image-multiple-outline', range: [0.15, 0.30] },
+  { key: 'freq', label: 'Frequency Analysis...', icon: 'chart-bell-curve-cumulative', range: [0.30, 0.44] },
+  { key: 'noise', label: 'Noise Pattern Analysis...', icon: 'grain', range: [0.44, 0.58] },
+  { key: 'compress', label: 'Compression Analysis...', icon: 'zip-box-outline', range: [0.58, 0.72] },
+  { key: 'edge', label: 'Edge Coherence Analysis...', icon: 'vector-square', range: [0.72, 0.86] },
+  { key: 'texture', label: 'Texture Analysis...', icon: 'texture-box', range: [0.86, 1.0] },
+  { key: 'compile', label: 'Compiling Results...', icon: 'file-chart-outline', range: [0.99, 1.0] },
 ];
+
+const StageItem = ({ stage, progress }) => {
+  const status = progress >= stage.range[1] ? 'completed' : progress >= stage.range[0] ? 'progress' : 'pending';
+  const itemAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (status !== 'pending') {
+      Animated.timing(itemAnim, { toValue: 1, duration: 400, useNativeDriver: true }).start();
+    }
+  }, [status]);
+  
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'completed': return <MaterialCommunityIcons name="check-circle" size={22} color="#10B981" />;
+      case 'progress': return <ActivityIndicator animating={true} color="#A78BFA" size={20} />;
+      case 'pending': return <MaterialCommunityIcons name="circle-outline" size={22} color="#404040" />;
+      default: return null;
+    }
+  };
+
+  return (
+    <Animated.View style={[styles.stageItem, { opacity: itemAnim }]}>
+      <View style={styles.stageIcon}>{getStatusIcon()}</View>
+      <Text style={[styles.stageLabel, status === 'pending' && {color: '#606060'}]}>{stage.label}</Text>
+    </Animated.View>
+  );
+};
+
 
 export default function AnalysisScreen({ navigation, route }) {
   const { file, fileType, fileInfo } = route.params;
-  
   const [progress, setProgress] = useState(0);
-  const [currentStage, setCurrentStage] = useState(ANALYSIS_STAGES[0]);
   const [error, setError] = useState(null);
   
-  const pulseAnim = useRef(new Animated.Value(1)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
-  
-  const setAnalysisResult = useAppStore((state) => state.setAnalysisResult);
   const addToHistory = useAppStore((state) => state.addToHistory);
   const incrementUsage = useAppStore((state) => state.incrementUsage);
 
-  // Pulse animation for the icon
   useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, {
-          toValue: 1.1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulseAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [pulseAnim]);
-
-  // Rotation animation
-  useEffect(() => {
-    const rotate = Animated.loop(
+    Animated.loop(
       Animated.timing(rotateAnim, {
         toValue: 1,
-        duration: 3000,
+        duration: 4000,
+        easing: Easing.linear,
         useNativeDriver: true,
       })
-    );
-    rotate.start();
-    return () => rotate.stop();
-  }, [rotateAnim]);
+    ).start();
 
-  // Update current stage based on progress
-  useEffect(() => {
-    const stage = ANALYSIS_STAGES.find(
-      (s) => progress >= s.range[0] && progress < s.range[1]
-    );
-    if (stage) {
-      setCurrentStage(stage);
-    }
-  }, [progress]);
-
-  // Run analysis
-  useEffect(() => {
     let isMounted = true;
-
     const runAnalysis = async () => {
       try {
-        // Progress callback
-        const onProgress = (value) => {
-          if (isMounted) {
-            setProgress(value);
-          }
-        };
-
-        // Run the detection
-        const result = await detectDeepfakeInFile(
-          file,
-          fileType,
-          { onProgress }
-        );
-
+        const result = await detectDeepfakeInFile(file, fileType, { onProgress: (p) => isMounted && setProgress(p) });
         if (isMounted) {
-          // Store result
-          setAnalysisResult(result);
-          addToHistory({
-            ...result,
-            fileInfo,
-            fileType,
-          });
-          
-          // Increment daily usage counter
+          addToHistory({ ...result, fileInfo, fileType });
           incrementUsage();
-
-          // Complete progress and navigate
           setProgress(1);
-          
-          // Small delay before navigation for visual completion
-          setTimeout(() => {
-            if (isMounted) {
-              navigation.replace('Results', { result });
-            }
-          }, 500);
+          setTimeout(() => navigation.replace('Results', { result }), 500);
         }
       } catch (err) {
-        console.error('Analysis error:', err);
-        if (isMounted) {
-          setError(err.message);
-        }
+        if (isMounted) setError(err.message);
       }
     };
-
     runAnalysis();
+    return () => { isMounted = false; };
+  }, []);
 
-    return () => {
-      isMounted = false;
-    };
-  }, [file, fileType]);
-
-  const rotateInterpolate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  const rotateInterpolate = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+  const rotateInterpolateReverse = rotateAnim.interpolate({ inputRange: [0, 1], outputRange: ['360deg', '0deg'] });
 
   if (error) {
+    // Error view remains simple and clear
     return (
-      <View style={styles.container}>
-        <StatusBar barStyle="light-content" />
+      <View style={styles.containerCenter}>
         <Surface style={styles.errorCard} elevation={3}>
-          <MaterialCommunityIcons
-            name="alert-circle"
-            size={48}
-            color="#FF6B6B"
-          />
+          <MaterialCommunityIcons name="alert-circle-outline" size={48} color="#FF6B6B" />
           <Text style={styles.errorTitle}>Analysis Failed</Text>
           <Text style={styles.errorText}>{error}</Text>
-          <Text
-            style={styles.retryButton}
-            onPress={() => navigation.goBack()}
-          >
-            ← Go Back
-          </Text>
+          <Button mode="outlined" onPress={() => navigation.goBack()} style={{borderColor: '#404040'}} textColor="#FFFFFF">
+            Go Back
+          </Button>
         </Surface>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
+      <LinearGradient colors={['#1A1A2E', '#0D0D0D']} style={styles.gradient} />
       
-      <LinearGradient
-        colors={['#FF6B6B15', '#0D0D0D']}
-        style={styles.gradient}
-      >
-        {/* Animated Icon */}
-        <View style={styles.iconContainer}>
-          <Animated.View
-            style={[
-              styles.rotatingRing,
-              { transform: [{ rotate: rotateInterpolate }] },
-            ]}
-          >
-            <View style={styles.ringInner} />
-          </Animated.View>
-          
-          <Animated.View
-            style={[
-              styles.pulsingIcon,
-              { transform: [{ scale: pulseAnim }] },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name={currentStage.icon}
-              size={48}
-              color="#FF6B6B"
-            />
-          </Animated.View>
+      <View style={styles.scannerContainer}>
+        <Animated.View style={[styles.scannerRing, { transform: [{ rotate: rotateInterpolate }] }]} />
+        <Animated.View style={[styles.scannerRing, { transform: [{ rotate: rotateInterpolateReverse }], width: '80%', height: '80%', opacity: 0.5 }]} />
+        <View style={styles.scannerCore}>
+          <Text style={styles.progressPercent}>{Math.round(progress * 100)}%</Text>
+          <Text style={styles.progressLabel}>Analyzing</Text>
         </View>
+      </View>
+      
+      <View style={styles.stageList}>
+        {ANALYSIS_STAGES.map(stage => <StageItem key={stage.key} stage={stage} progress={progress} />)}
+      </View>
 
-        {/* Title */}
-        <Text style={styles.title}>Analyzing Media</Text>
-        <Text style={styles.subtitle}>
-          {fileType === 'video' ? 'Processing video frames...' : 'Processing image...'}
-        </Text>
-
-        {/* Progress Section */}
-        <View style={styles.progressSection}>
-          <View style={styles.progressHeader}>
-            <Text style={styles.progressLabel}>Progress</Text>
-            <Text style={styles.progressPercent}>
-              {Math.round(progress * 100)}%
-            </Text>
-          </View>
-          
-          <ProgressBar
-            progress={progress}
-            color="#FF6B6B"
-            style={styles.progressBar}
-          />
-        </View>
-
-        {/* Current Stage */}
-        <Surface style={styles.stageCard} elevation={2}>
-          <View style={styles.stageIconContainer}>
-            <MaterialCommunityIcons
-              name={currentStage.icon}
-              size={24}
-              color="#FF6B6B"
-            />
-          </View>
-          <View style={styles.stageTextContainer}>
-            <Text style={styles.stageNumber}>
-              Step {currentStage.id} of {ANALYSIS_STAGES.length}
-            </Text>
-            <Text style={styles.stageLabel}>{currentStage.label}</Text>
-          </View>
-        </Surface>
-
-        {/* Model Progress Cards */}
-        <View style={styles.modelsGrid}>
-          {[
-            { name: 'Face Detection', icon: 'face-recognition', done: progress > 0.55 },
-            { name: 'Forensics Model', icon: 'magnify', done: progress > 0.70 },
-            { name: 'Liveness Check', icon: 'eye', done: progress > 0.85 },
-            { name: 'Symmetry Analysis', icon: 'chart-line', done: progress > 0.90 },
-          ].map((model, index) => (
-            <Surface
-              key={index}
-              style={[
-                styles.modelCard,
-                model.done && styles.modelCardDone,
-              ]}
-              elevation={1}
-            >
-              <MaterialCommunityIcons
-                name={model.done ? 'check-circle' : model.icon}
-                size={20}
-                color={model.done ? '#10B981' : '#808080'}
-              />
-              <Text
-                style={[
-                  styles.modelName,
-                  model.done && styles.modelNameDone,
-                ]}
-              >
-                {model.name}
-              </Text>
-            </Surface>
-          ))}
-        </View>
-
-        {/* Info */}
-        <View style={styles.infoContainer}>
-          <MaterialCommunityIcons
-            name="shield-lock"
-            size={16}
-            color="#808080"
-          />
-          <Text style={styles.infoText}>
-            All processing happens on-device. Your media stays private.
-          </Text>
-        </View>
-      </LinearGradient>
-    </View>
+      <Text style={styles.privacyText}>
+        <MaterialCommunityIcons name="lock-check" size={14} /> All processing is done on your device for complete privacy.
+      </Text>
+    </SafeAreaView>
   );
 }
 
@@ -292,152 +138,88 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0D0D0D',
-  },
-  gradient: {
-    flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: StatusBar.currentHeight + 60 || 100,
-    alignItems: 'center',
-  },
-  iconContainer: {
-    width: 120,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 32,
-  },
-  rotatingRing: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 3,
-    borderColor: '#FF6B6B30',
-    borderTopColor: '#FF6B6B',
-  },
-  ringInner: {
-    width: '100%',
-    height: '100%',
-  },
-  pulsingIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#FF6B6B15',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#808080',
-    marginBottom: 40,
-  },
-  progressSection: {
-    width: '100%',
-    marginBottom: 32,
-  },
-  progressHeader: {
-    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    paddingVertical: 40,
   },
-  progressLabel: {
-    fontSize: 14,
-    color: '#A0A0A0',
+  containerCenter: {
+      flex: 1,
+      backgroundColor: '#0D0D0D',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+  },
+  gradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  scannerContainer: {
+    width: 220,
+    height: 220,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  scannerRing: {
+    position: 'absolute',
+    width: '100%',
+    height: '100%',
+    borderRadius: 110,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    borderTopColor: '#A78BFA',
+    borderLeftColor: '#A78BFA',
+  },
+  scannerCore: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(26, 26, 46, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
   },
   progressPercent: {
-    fontSize: 24,
+    fontSize: 48,
     fontWeight: 'bold',
-    color: '#FF6B6B',
+    color: '#FFFFFF',
   },
-  progressBar: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#252525',
+  progressLabel: {
+    fontSize: 16,
+    color: '#A0A0A0',
+    marginTop: -4,
   },
-  stageCard: {
-    width: '100%',
+  stageList: {
+    width: '90%',
+    padding: 20,
     backgroundColor: '#1A1A1A',
     borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 24,
     borderWidth: 1,
     borderColor: '#252525',
   },
-  stageIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: '#FF6B6B15',
-    justifyContent: 'center',
+  stageItem: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 16,
+    paddingVertical: 10,
   },
-  stageTextContainer: {
-    flex: 1,
-  },
-  stageNumber: {
-    fontSize: 12,
-    color: '#808080',
-    marginBottom: 4,
+  stageIcon: {
+    width: 30,
+    alignItems: 'center',
+    marginRight: 12,
   },
   stageLabel: {
     fontSize: 16,
-    fontWeight: '600',
     color: '#FFFFFF',
   },
-  modelsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-  },
-  modelCard: {
-    width: (width - 60) / 2,
-    backgroundColor: '#1A1A1A',
-    borderRadius: 12,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: '#252525',
-  },
-  modelCardDone: {
-    borderColor: '#10B98140',
-    backgroundColor: '#10B98110',
-  },
-  modelName: {
+  privacyText: {
     fontSize: 12,
-    color: '#808080',
-    marginLeft: 8,
-    flex: 1,
-  },
-  modelNameDone: {
-    color: '#10B981',
-  },
-  infoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 'auto',
-    marginBottom: 40,
-  },
-  infoText: {
-    fontSize: 12,
-    color: '#808080',
-    marginLeft: 8,
+    color: '#606060',
+    textAlign: 'center',
+    paddingHorizontal: 30,
+    marginBottom: 20,
   },
   errorCard: {
-    margin: 24,
+    width: '100%',
     padding: 32,
     backgroundColor: '#1A1A1A',
     borderRadius: 16,
@@ -454,15 +236,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: 14,
-    color: '#808080',
+    color: '#A0A0A0',
     textAlign: 'center',
     lineHeight: 20,
-  },
-  retryButton: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    marginTop: 24,
-    fontWeight: '600',
+    marginBottom: 24,
   },
 });
 

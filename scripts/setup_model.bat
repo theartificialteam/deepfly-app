@@ -40,3 +40,6 @@ echo You can now run the app with: npx expo start
 echo.
 pause
 
+
+
+

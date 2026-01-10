@@ -81,3 +81,6 @@ For California residents:
 - You have the right to know what data we collect (none beyond what's stated)
 - You have the right to delete your data
 
+
+
+

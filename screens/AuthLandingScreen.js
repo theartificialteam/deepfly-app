@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
   StatusBar,
+  Animated,
   Dimensions,
+  SafeAreaView,
 } from 'react-native';
 import { Text, Button, Surface } from 'react-native-paper';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,10 +13,42 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { useAppStore } from '../store/appStore';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+
+// Custom animated component factory
+const createAnimatedComponent = (Component) => Animated.createAnimatedComponent(Component);
+const AnimatedSurface = createAnimatedComponent(Surface);
+const AnimatedButton = createAnimatedComponent(Button);
+const AnimatedText = createAnimatedComponent(Text);
+
+// Feature component
+const Feature = ({ icon, title, description, style }) => (
+  <AnimatedSurface style={[styles.featureCard, style]} elevation={3}>
+    <MaterialCommunityIcons name={icon} size={28} color="#A78BFA" />
+    <Text style={styles.featureTitle}>{title}</Text>
+    <Text style={styles.featureDescription}>{description}</Text>
+  </AnimatedSurface>
+);
 
 export default function AuthLandingScreen({ navigation }) {
   const setUser = useAppStore((state) => state.setUser);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+    
+    Animated.spring(slideAnim, {
+      toValue: 0,
+      tension: 20,
+      friction: 7,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   const handleGuestContinue = () => {
     setUser({
@@ -24,7 +58,6 @@ export default function AuthLandingScreen({ navigation }) {
       isPro: false,
       isGuest: true,
     });
-    // Navigation will happen automatically via App.js conditional rendering
   };
 
   const handleSignUp = () => {
@@ -32,85 +65,75 @@ export default function AuthLandingScreen({ navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
       
       <LinearGradient
-        colors={['#FF6B6B20', '#0D0D0D', '#0D0D0D']}
+        colors={['#1A1A2E', '#0D0D0D']}
         style={styles.gradient}
-      >
-        {/* Logo Section */}
-        <View style={styles.logoSection}>
-          <View style={styles.iconWrapper}>
+      />
+
+      <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
+        {/* Header */}
+        <Animated.View style={[styles.header, { transform: [{ translateY: slideAnim }] }]}>
+          <View style={styles.logoContainer}>
             <MaterialCommunityIcons
-              name="eye-check"
-              size={64}
-              color="#FF6B6B"
+              name="shield-check"
+              size={40}
+              color="#A78BFA"
             />
           </View>
           <Text style={styles.appName}>DeepFly</Text>
-          <Text style={styles.tagline}>AI-Powered Deepfake Detector</Text>
+          <Text style={styles.tagline}>Your Personal Deepfake Detector</Text>
+        </Animated.View>
+        
+        {/* Features */}
+        <View style={styles.featuresGrid}>
+          <Feature
+            icon="lock-check"
+            title="Total Privacy"
+            description="All analysis happens on-device. Your media never leaves your phone."
+            style={{ transform: [{ translateY: slideAnim }] }}
+          />
+          <Feature
+            icon="rocket-launch"
+            title="Instant Results"
+            description="Our advanced AI provides a verdict in seconds, not minutes."
+            style={{ transform: [{ translateY: slideAnim }] }}
+          />
         </View>
 
-        {/* Description */}
-        <Text style={styles.description}>
-          Protect yourself from synthetic media manipulation. Analyze photos and 
-          videos with on-device AI for complete privacy.
-        </Text>
-
-        {/* Features Preview */}
-        <View style={styles.featuresContainer}>
-          {[
-            { icon: 'shield-check', text: 'On-device analysis' },
-            { icon: 'brain', text: '4-model AI ensemble' },
-            { icon: 'lock', text: '100% private' },
-          ].map((feature, index) => (
-            <View key={index} style={styles.featureRow}>
-              <MaterialCommunityIcons
-                name={feature.icon}
-                size={20}
-                color="#FF6B6B"
-              />
-              <Text style={styles.featureText}>{feature.text}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Buttons */}
-        <View style={styles.buttonsContainer}>
+        {/* Action Buttons */}
+        <Animated.View style={[styles.buttonContainer, { transform: [{ translateY: slideAnim }] }]}>
           <Button
             mode="contained"
             onPress={handleSignUp}
             style={styles.primaryButton}
             contentStyle={styles.buttonContent}
             labelStyle={styles.buttonLabel}
-            icon="account-plus"
+            icon="arrow-right-circle"
           >
-            Sign Up / Log In
+            Get Started
           </Button>
 
           <Button
-            mode="outlined"
+            mode="text"
             onPress={handleGuestContinue}
             style={styles.secondaryButton}
-            contentStyle={styles.buttonContent}
             labelStyle={styles.secondaryButtonLabel}
-            textColor="#A0A0A0"
+            textColor="#808080"
           >
             Continue as Guest
           </Button>
-
-          <Text style={styles.guestNote}>
-            Guest: 5 free analyses per day
-          </Text>
-        </View>
+          <Text style={styles.guestNote}>5 free analyses per day</Text>
+        </Animated.View>
 
         {/* Footer */}
-        <Text style={styles.footer}>
-          By continuing, you agree to our Terms of Service
-        </Text>
-      </LinearGradient>
-    </View>
+        <AnimatedText style={[styles.footer, { opacity: fadeAnim }]}>
+          By continuing, you agree to our Terms of Service and Privacy Policy.
+        </AnimatedText>
+      </Animated.View>
+    </SafeAreaView>
   );
 }
 
@@ -120,70 +143,81 @@ const styles = StyleSheet.create({
     backgroundColor: '#0D0D0D',
   },
   gradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  contentContainer: {
     flex: 1,
-    paddingHorizontal: 24,
-    justifyContent: 'center',
-  },
-  logoSection: {
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 32,
+    padding: 24,
+    paddingTop: height * 0.1,
+    paddingBottom: height * 0.05,
   },
-  iconWrapper: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#FF6B6B15',
+  header: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  logoContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: 'rgba(167, 139, 250, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
-    borderWidth: 2,
-    borderColor: '#FF6B6B40',
+    borderWidth: 1,
+    borderColor: 'rgba(167, 139, 250, 0.2)',
   },
   appName: {
     fontSize: 42,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    letterSpacing: 2,
-  },
-  tagline: {
-    fontSize: 14,
-    color: '#FF6B6B',
-    marginTop: 4,
     letterSpacing: 1,
   },
-  description: {
-    fontSize: 15,
+  tagline: {
+    fontSize: 16,
+    color: '#A78BFA',
+    marginTop: 4,
+  },
+  featuresGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+    marginBottom: 20,
+  },
+  featureCard: {
+    flex: 1,
+    backgroundColor: '#1A1A1A',
+    borderRadius: 16,
+    padding: 16,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#252525',
+    minHeight: 150,
+  },
+  featureTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginTop: 12,
+    marginBottom: 6,
+  },
+  featureDescription: {
+    fontSize: 12,
     color: '#A0A0A0',
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 32,
+    lineHeight: 18,
   },
-  featuresContainer: {
-    marginBottom: 40,
-  },
-  featureRow: {
-    flexDirection: 'row',
+  buttonContainer: {
+    width: '100%',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  featureText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    marginLeft: 10,
-  },
-  buttonsContainer: {
-    marginBottom: 24,
   },
   primaryButton: {
     borderRadius: 16,
-    backgroundColor: '#FF6B6B',
-    marginBottom: 12,
-  },
-  secondaryButton: {
-    borderRadius: 16,
-    borderColor: '#404040',
-    marginBottom: 12,
+    backgroundColor: '#A78BFA',
+    width: '100%',
+    marginBottom: 8,
   },
   buttonContent: {
     height: 56,
@@ -192,18 +226,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+  secondaryButton: {
+    marginTop: 8,
+  },
   secondaryButtonLabel: {
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '500',
   },
   guestNote: {
     fontSize: 12,
     color: '#606060',
-    textAlign: 'center',
+    marginTop: 4,
   },
   footer: {
     fontSize: 11,
     color: '#404040',
     textAlign: 'center',
+    position: 'absolute',
+    bottom: 20,
+    alignSelf: 'center',
   },
 });
+
+
+
+
 
